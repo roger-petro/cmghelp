@@ -13,7 +13,7 @@ function getExtensionConfig() {
     return { rootPrefix, version, solver };
 }
 
-function loadKeywordData(rootPrefix: string, version: string) {
+function loadKeywordData(rootPrefix: string, version: string, preferredSolver: string) {
     const config = vscode.workspace.getConfiguration('cmghelp');
     let keywordDataPath = config.get<string>('cmghelp.keywordDataPath');
 
@@ -38,48 +38,59 @@ function loadKeywordData(rootPrefix: string, version: string) {
         console.log(`As versões disponíveis são: ${Object.keys(keywordData.version).join(', ')}`);
         return null;
     }
+    const versionData = keywordData.version[version];
+    // Inicializa o objeto para armazenar as keywords mescladas
+    let mergedKeywords: any = {};
 
-    return keywordData.version[version];
+    // Carregar o solver não preferido primeiro
+    const secondarySolver = preferredSolver === 'IMEX' ? 'GEM' : 'IMEX';
+    if (versionData[secondarySolver]) {
+        mergedKeywords = { ...versionData[secondarySolver] };  // Carrega as keywords do solver não preferido
+    }
+
+    // Carregar o solver preferido depois, sobrescrevendo quaisquer conflitos de keyword
+    if (versionData[preferredSolver]) {
+        mergedKeywords = { ...mergedKeywords, ...versionData[preferredSolver] };  // Sobrescreve com o solver preferido
+    }
+
+    return mergedKeywords;  // Retorna as keywords mescladas
 }
 
 // Função para buscar a keyword com base nas configurações do usuário
-function searchKeyword(keyword: string, solver: string, keywordData: any) {
-    const solverData = keywordData[solver];
+function searchKeyword(keyword: string) {
+    const solverData = keywordData[keyword];
 
-    if (!solverData || !solverData[keyword]) {
+    if (!solverData) {
         //vscode.window.showErrorMessage(`A keyword ${keyword} não foi encontrada para o solver ${solver}.`);
-        console.error(`A keyword ${keyword} não foi encontrada para o solver ${solver}.`);
+        console.error(`A keyword ${keyword} não foi encontrada`);
         return null;
     }
 
-    return solverData[keyword];
+    return solverData;
 }
 
 export function activate(context: vscode.ExtensionContext) {
 
     console.log("CMGHelp has been Activated");
+    const { rootPrefix, version, solver } = getExtensionConfig();
+    if (!rootPrefix || !version || !solver) {
+        return new vscode.Hover('Configurações de rootPrefix, versão ou solver não estão definidas.');
+    }
+    keywordData = loadKeywordData(rootPrefix, version, solver);
+
+    if (!keywordData) {
+        return new vscode.Hover('O arquivo keywordData.json não foi carregado corretamente.');
+    }
 
     // HoverProvider para exibir a descrição ao passar o mouse sobre uma keyword
     const hoverProvider = vscode.languages.registerHoverProvider('cmgLang', {
         provideHover(document, position, token) {
 
-            const { rootPrefix, version, solver } = getExtensionConfig();
-
-            if (!rootPrefix || !version || !solver) {
-                return new vscode.Hover('Configurações de rootPrefix, versão ou solver não estão definidas.');
-            }
-
-            const keywordData = loadKeywordData(rootPrefix, version);
-
-            if (!keywordData) {
-                return new vscode.Hover('O arquivo keywordData.json não foi carregado corretamente.');
-            }
-
             const range = document.getWordRangeAtPosition(position);
             const keyword = document.getText(range).toUpperCase().trim();
             console.log(`Keyword capturada no hover: ${keyword}`);
 
-            const keywordInfo = searchKeyword(keyword, solver, keywordData);
+            const keywordInfo = searchKeyword(keyword);
 
             if (!keywordInfo) {
                 return new vscode.Hover(`Nenhuma documentação encontrada para a keyword: ${keyword}`);
@@ -112,13 +123,13 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        const keywordData = loadKeywordData(rootPrefix, version);
+        
 
         if (!keywordData) {
             return;
         }
 
-        let keywordInfo = searchKeyword(keyword.toUpperCase(), solver, keywordData);
+        let keywordInfo = searchKeyword(keyword);
 
         // if (!keywordInfo) {
         //     // Procura no keywordData por um arquivo que tenha um caminho que termine com o nome do linkPath
