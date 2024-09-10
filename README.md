@@ -31,6 +31,7 @@ The extension requires a `CMGKeywords.json` file to function, which contains the
 #### Steps to generate the `CMGKeywords.json` file:
 
 1. Ensure you have Python installed.
+2. Download `parsedoc.py` script used to generate the `CMGKeywords.json`: [GitHub repository file](https://github.com/roger-petro/cmghelp/blob/main/src/utils/parsedoc.py). 
 
 2. Install the **BeautifulSoup4** package using the following command:
 
