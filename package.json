@@ -39,6 +39,33 @@
           "command": "cmghelp.version"
         }
       ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "CMG Help",
+      "properties": {
+          "cmghelp.rootPrefix": {
+              "type": "string",
+              "default": "C:\\Program Files\\CMG\\Manuals",
+              "description": "Root prefix directory where the manuals are stored"
+          },
+          "cmghelp.version": {
+              "type": "string",
+              "default": "2022.10",
+              "description": "Version of the manuals"
+          },
+          "cmghelp.solver": {
+              "type": "string",
+              "enum": ["IMEX", "GEM"],
+              "default": "IMEX",
+              "description": "Solver being used (IMEX or GEM) to doc lookup"
+          },
+          "cmghelp.keywordDataPath": {
+            "type": "string",
+            "default": "${env:USERPROFILE}\\CMGKeywords.json",
+            "description": "Path to the CMGKeywords.json file"
+          }
+      }
     }
   },
   "scripts": {

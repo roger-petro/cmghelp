@@ -109,7 +109,7 @@ for place in places:
         process_htm_files(htm_dir, app_name)
 
 # Salvar os dados em um arquivo JSON
-with open('keywordData.json', 'w', encoding='utf-8') as json_file:
+with open('CMGKeywords.json', 'w', encoding='utf-8') as json_file:
     json.dump(keyword_data, json_file, indent=4, ensure_ascii=False)
 
 print('Processamento finalizado e arquivo keywordData.json gerado.')
