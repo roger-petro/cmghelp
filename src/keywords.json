@@ -1,0 +1,15 @@
+{
+
+    "WSRF": {
+      "description": "Descrição resumida da WRPN. Formato: ...",
+      "url": "http://example.com/doc/keyword1"
+    },
+    "OUTPRN": {
+      "description": "Descrição resumida da OUTPRN. Formato: ...",
+      "url": "http://example.com/doc/keyword2"
+    },
+    "OUTSRF": {
+      "description": "Descrição resumida da OUTSRF. Formato: ...",
+      "url": "http://example.com/doc/keyword2"
+    }
+}

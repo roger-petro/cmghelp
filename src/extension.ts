@@ -1,26 +1,53 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+let keywordData: { [key: string]: { description: string; url: string } } = {};
+
 export function activate(context: vscode.ExtensionContext) {
+    // Caminho para o arquivo JSON contendo as descrições e URLs
+    const filePath = path.join(context.extensionPath, 'src', 'keywords.json');
+	console.log("Ativando a extensão");
+    // Carregar o arquivo JSON
+    fs.readFile(filePath, 'utf8', (err, data) => {
+        if (err) {
+            console.error('Erro ao carregar o arquivo JSON:', err);
+            return;
+        }
+        keywordData = JSON.parse(data);
+		console.log("Arquivo de keywords carregado");
+    });
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "cmghelp" is now active!');
+    const hoverProvider = vscode.languages.registerHoverProvider('cmgLang', {
+        provideHover(document, position, token) {
+            const range = document.getWordRangeAtPosition(position);
+            const word = document.getText(range);
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('cmghelp.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from CMGHelp!');
+            const keywordInfo = keywordData[word.toUpperCase()];
+
+            if (keywordInfo) {
+                // Exibe a descrição e um link para "Mais"
+                const hoverContent = new vscode.MarkdownString();
+                hoverContent.isTrusted = true; // Permite links clicáveis
+                hoverContent.appendText(keywordInfo.description + '\n\n');
+                hoverContent.appendMarkdown(`[Mais informações](command:cmghelp.openKeywordUrl?${encodeURIComponent(JSON.stringify(keywordInfo.url))})`);
+
+                return new vscode.Hover(hoverContent);
+            }
+            return null;
+        }
+    });
+
+	let curVersion = vscode.commands.registerCommand('cmghelp.version', function() {
+		vscode.window.showInformationMessage("Versão não informada");
 	});
 
-	context.subscriptions.push(disposable);
+    context.subscriptions.push(hoverProvider);
+	context.subscriptions.push(curVersion);
+
+	// Registrar o comando que abre a URL no navegador
+    vscode.commands.registerCommand('cmghelp.openKeywordUrl', (url: string) => {
+        vscode.env.openExternal(vscode.Uri.parse(url));
+    });
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() {}

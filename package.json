@@ -2,22 +2,44 @@
   "name": "cmghelp",
   "displayName": "CMGHelp",
   "description": "CMG Syntax Help",
+  "publisher": "petro",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.93.0"
+    "vscode": "^1.92.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
+    "languages": [
+      {
+          "id": "cmgLang",
+          "extensions": [".dat", ".inc"],
+          "configuration": "./language-configuration.json"
+      }
+    ],
     "commands": [
       {
-        "command": "cmghelp.helloWorld",
-        "title": "Hello World"
+        "command": "cmghelp.openKeywordUrl",
+        "title": "Open Keyword Documentation"
+      },
+      {
+        "command": "cmghelp.version",
+        "title": "Versão do CMG Help",
+        "category": "CMG"
       }
-    ]
+    ],
+    "menus" : {
+      "commandPalette": [
+        {
+          "command": "cmghelp.version"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
