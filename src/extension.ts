@@ -96,13 +96,11 @@ export function activate(context: vscode.ExtensionContext) {
                 return new vscode.Hover(`Nenhuma documentação encontrada para a keyword: ${keyword}`);
             }
 
-
             const hoverContent = new vscode.MarkdownString();
             hoverContent.appendMarkdown(`**${keyword}**\n\n`);
             hoverContent.appendMarkdown(`${keywordInfo.description}\n\n`);
             console.log(`Keyword passada para o comando cmghelp.openKeywordDocumentation: ${keyword}`);
             hoverContent.appendMarkdown(`[Mais informações](command:cmghelp.openKeywordDocumentation?${encodeURIComponent(JSON.stringify(keyword))})`);
-
 
             // Permitir que o link de "Mais informações" seja clicável
             hoverContent.isTrusted = true;
@@ -123,18 +121,11 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        
-
         if (!keywordData) {
             return;
         }
 
         let keywordInfo = searchKeyword(keyword);
-
-        // if (!keywordInfo) {
-        //     // Procura no keywordData por um arquivo que tenha um caminho que termine com o nome do linkPath
-        //     keywordInfo = Object.values(keywordData).find(info => info.file && info.file.endsWith(path.basename(linkPath)));
-        // }
 
         if (!keywordInfo) {
             vscode.window.showErrorMessage(`Nenhuma documentação encontrada para o caminho ${rootPrefix} ou keyword ${keyword}`);
@@ -150,9 +141,9 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         const panel = vscode.window.createWebviewPanel(
-            'keywordDocumentation', 
-            `${keyword} Documentation`, 
-            vscode.ViewColumn.One, 
+            'keywordDocumentation',
+            `${keyword} Documentation`,
+            vscode.ViewColumn.One,
             {
                 enableScripts: true,
                 localResourceRoots: [
@@ -175,58 +166,25 @@ export function activate(context: vscode.ExtensionContext) {
         });
     });
 
-    // vscode.commands.registerCommand('cmghelp.openHtmlFile', (fileUri: string) => {
-    //     const panel = vscode.window.createWebviewPanel(
-    //         'htmlDocumentation',
-    //         'HTML Documentation',
-    //         vscode.ViewColumn.One,
-    //         {
-    //             enableScripts: true,
-    //             localResourceRoots: [vscode.Uri.file(path.dirname(vscode.Uri.parse(fileUri).fsPath))]
-    //         }
-    //     );
-    
-    //     // Ler e carregar o novo arquivo HTML
-    //     const filePath = vscode.Uri.parse(fileUri).fsPath;
-    //     fs.readFile(filePath, 'utf8', (err, data) => {
-    //         if (err) {
-    //             vscode.window.showErrorMessage(`Erro ao carregar o arquivo HTML: ${err.message}`);
-    //             return;
-    //         }
-    
-    //         // Ajustar referências dentro do novo HTML
-    //         const adjustedHtmlContent = adjustHtmlReferences(data, filePath, panel);
-    //         panel.webview.html = adjustedHtmlContent;
-    //     });
-    // });
-
-    
-    // Adicionar comandos específicos para keywords do JSON (opcional, mas útil para testes rápidos)
-    // for (const keyword in keywordData) {
-    //     context.subscriptions.push(vscode.commands.registerCommand(`cmghelp.open${keyword}Documentation`, () => {
-    //         vscode.commands.executeCommand('cmghelp.openKeywordDocumentation', keyword);
-    //     }));
-    // }
-
     function adjustHtmlReferences(htmlContent: string, htmlFilePath: string, panel: vscode.WebviewPanel): string {
         // Ajustar referências de CSS
         htmlContent = htmlContent.replace(/<link.*?href="(.*?)".*?>/g, (match, cssPath) => {
             const cssUri = panel.webview.asWebviewUri(vscode.Uri.file(path.join(path.dirname(htmlFilePath), cssPath)));
             return match.replace(cssPath, cssUri.toString());
         });
-    
+
         // Ajustar referências de JS
         htmlContent = htmlContent.replace(/<script.*?src="(.*?)".*?>/g, (match, jsPath) => {
             const jsUri = panel.webview.asWebviewUri(vscode.Uri.file(path.join(path.dirname(htmlFilePath), jsPath)));
             return match.replace(jsPath, jsUri.toString());
         });
-    
+
         // Ajustar referências de imagens (como SVG)
         htmlContent = htmlContent.replace(/<img.*?src="(.*?)".*?>/g, (match, imgPath) => {
             const imgUri = panel.webview.asWebviewUri(vscode.Uri.file(path.join(path.dirname(htmlFilePath), imgPath)));
             return match.replace(imgPath, imgUri.toString());
         });
-    
+
         //Ajustar links internos para abrir no WebView
         htmlContent = htmlContent.replace(/<a.*?href="(.*?)".*?>/g, (match, linkPath) => {
             const keyword = path.basename(linkPath, path.extname(linkPath)).toUpperCase();
@@ -237,7 +195,7 @@ export function activate(context: vscode.ExtensionContext) {
             const keyword = path.basename(linkPath, path.extname(linkPath)).toUpperCase();
             return match.replace(linkPath, `command:cmghelp.openKeywordDocumentation?${encodeURIComponent(JSON.stringify(linkPath))}`);
         });
-    
+
         // Adicionar script para capturar cliques em links
         const script = `
         <script>
@@ -255,17 +213,5 @@ export function activate(context: vscode.ExtensionContext) {
         </script>
         `;
         return htmlContent + script;
-
-
-
-
-// Ajustar links internos para abrir o arquivo HTML diretamente em outro WebView
-    // htmlContent = htmlContent.replace(/<a.*?href="(.*?)".*?>/g, (match, linkPath) => {
-    //     const fileUri = vscode.Uri.file(path.join(path.dirname(htmlFilePath), linkPath));
-    //     const webviewUri = panel.webview.asWebviewUri(fileUri);
-    //     return match.replace(linkPath, `command:cmghelp.openHtmlFile?${encodeURIComponent(webviewUri.toString())}`);
-    // });
-
-        //return htmlContent;
     }
 }

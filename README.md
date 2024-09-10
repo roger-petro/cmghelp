@@ -1,71 +1,39 @@
-# cmghelp README
+# CMG Help Extension
 
-This is the README for your extension "cmghelp". After writing up a brief description, we recommend including the following sections.
+The **CMG Help** extension provides detailed descriptions for keywords used in CMG simulation models, helping users better understand the commands they are using, particularly in High-Performance Computing (HPC) environments. The extension supports both GEM and IMEX solvers, with a customizable keyword system that loads from a `CMGKeywords.json` file.
+
+Please **note** that the CMG keywords do not come bundled with the installation of this extension due to the intellectual property rights of the software manufacturer. Users are required to generate the `CMGKeywords.json` file themselves, provided they have a valid installation of the CMG flow simulator. The provided Python script (`parsedoc.py`) can be used to parse the documentation from an existing installation and create the necessary file for the extension to function.
+
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- Hover over CMG simulation keywords to see a description of the command.
+- Click on "More Information/Mais informações" in the hover tooltip to open the detailed documentation of the keyword in a webview.
+- Supports both **GEM** and **IMEX** solvers, allowing keyword lookup from either or both, depending on user configuration.
 
-For example if there is an image subfolder under your extension project workspace:
+## Setup Instructions
 
-\!\[feature X\]\(images/feature-x.png\)
+To use the CMG Help extension, you'll need to perform some initial configuration:
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### 1. Configuration in VSCode
 
-## Requirements
+After installing the extension, you must configure the following settings for it to work correctly:
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- **`cmghelp.rootPrefix`**: The root directory where the CMG Manuals are stored (default: `C:\Program Files\CMG\Manuals`).
+- **`cmghelp.version`**: The version of the CMG Manuals you are using (default: `2022.10`).
+- **`cmghelp.solver`**: The solver being used, either **IMEX** or **GEM**.
+- **`cmghelp.keywordDataPath`**: The path to the `CMGKeywords.json` file, which contains the keyword data. By default, it is located in the user's home directory (`C:\Users\<YourUser>\CMGKeywords.json` on Windows).
 
-## Extension Settings
+### 2. Generate the `CMGKeywords.json` File
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+The extension requires a `CMGKeywords.json` file to function, which contains the descriptions and links for the CMG keywords. You can generate this file by using a Python script provided in the `utils` folder of the extension.
 
-For example:
+#### Steps to generate the `CMGKeywords.json` file:
 
-This extension contributes the following settings:
+1. Ensure you have Python installed.
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+2. Install the **BeautifulSoup4** package using the following command:
 
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+```bash
+pip install beautifulsoup4
+```
