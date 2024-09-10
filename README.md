@@ -4,7 +4,6 @@ The **CMG Help** extension provides detailed descriptions for keywords used in C
 
 Please **note** that the CMG keywords do not come bundled with the installation of this extension due to the intellectual property rights of the software manufacturer. Users are required to generate the `CMGKeywords.json` file themselves, provided they have a valid installation of the CMG flow simulator. The provided Python script (`parsedoc.py`) can be used to parse the documentation from an existing installation and create the necessary file for the extension to function.
 
-
 ## Features
 
 - Hover over CMG simulation keywords to see a description of the command.
@@ -28,13 +27,16 @@ After installing the extension, you must configure the following settings for it
 
 The extension requires a `CMGKeywords.json` file to function, which contains the descriptions and links for the CMG keywords. You can generate this file by using a Python script provided in the `utils` folder of the extension.
 
-#### Steps to generate the `CMGKeywords.json` file:
+#### Steps to generate the `CMGKeywords.json` file
 
 1. Ensure you have Python installed.
-2. Download `parsedoc.py` script used to generate the `CMGKeywords.json`: [GitHub repository file](https://github.com/roger-petro/cmghelp/blob/main/src/utils/parsedoc.py). 
+2. Download `parsedoc.py` script used to generate the `CMGKeywords.json`: [GitHub repository file](https://github.com/roger-petro/cmghelp/blob/main/src/utils/parsedoc.py).
+3. Install the **BeautifulSoup4** package using the following command
 
-2. Install the **BeautifulSoup4** package using the following command:
+    ```bash
+    pip install beautifulsoup4
+    ```
 
-```bash
-pip install beautifulsoup4
-```
+4. Edit parsedoc.py to change/add/remove htm documentation directories, if needed
+5. Run `python .\parsedoc.py`. A CMGKeywords.json will be created at the same script's directory
+6. Copy the CMGKeyword.json to your home dir, according configuration above.
