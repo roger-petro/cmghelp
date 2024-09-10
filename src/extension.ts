@@ -5,6 +5,8 @@ import * as path from 'path';
 // Variável global que contém os dados das keywords
 let keywordData: { [key: string]: { description: string, file: string } } = {};
 
+let outLog: vscode.OutputChannel;
+
 function getExtensionConfig() {
     const config = vscode.workspace.getConfiguration('cmghelp');
     const rootPrefix = config.get<string>('rootPrefix');
@@ -25,7 +27,7 @@ function loadKeywordData(rootPrefix: string, version: string, preferredSolver: s
 
     if (!fs.existsSync(keywordDataPath)) {
         vscode.window.showErrorMessage(`O arquivo CMGKeywords.json não foi encontrado no caminho: ${keywordDataPath}`);
-        console.log(`Verifique se o caminho está correto: ${keywordDataPath}`);
+        outLog.appendLine(`Verifique se o caminho está correto: ${keywordDataPath}`);
         return null;
     }
 
@@ -33,19 +35,25 @@ function loadKeywordData(rootPrefix: string, version: string, preferredSolver: s
     const keywordData = JSON.parse(rawData);
 
     // Verifica se a versão existe
-    if (!keywordData.version[version]) {
+    if (!keywordData.versions[version]) {
         vscode.window.showErrorMessage(`A versão ${version} não foi encontrada no CMGKeywords.json.`);
-        console.log(`As versões disponíveis são: ${Object.keys(keywordData.version).join(', ')}`);
+        outLog.appendLine(`As versões disponíveis são: ${Object.keys(keywordData.versions).join(', ')}`);
         return null;
     }
-    const versionData = keywordData.version[version];
+    const versionData = keywordData.versions[version];
     // Inicializa o objeto para armazenar as keywords mescladas
     let mergedKeywords: any = {};
 
     // Carregar o solver não preferido primeiro
-    const secondarySolver = preferredSolver === 'IMEX' ? 'GEM' : 'IMEX';
-    if (versionData[secondarySolver]) {
-        mergedKeywords = { ...versionData[secondarySolver] };  // Carrega as keywords do solver não preferido
+    const solverOrder = 
+        preferredSolver === 'IMEX' ? ['STARS', 'GEM', 'IMEX'] :
+        preferredSolver === 'GEM' ? ['STARS', 'IMEX', 'GEM'] :
+        preferredSolver === 'STARS' ? ['IMEX', 'GEM', 'STARS'] : [];
+
+    for (const order of solverOrder) {
+        if (versionData[order]) {
+            mergedKeywords = { ...versionData[order] };  // Carrega as keywords do solver não preferido
+        }
     }
 
     // Carregar o solver preferido depois, sobrescrevendo quaisquer conflitos de keyword
@@ -70,8 +78,15 @@ function searchKeyword(keyword: string) {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+    outLog = vscode.window.createOutputChannel('CMG Help Logs');
+    outLog.appendLine('CMG Help extension has been activated');
 
-    console.log("CMGHelp has been Activated");
+    let cmgShowLogs = vscode.commands.registerCommand('cmghelp.showLogs', () => {
+        outLog.show();  // Exibe o canal de saída no painel Output
+        outLog.appendLine('Log information: Command executed');
+    });
+    context.subscriptions.push(cmgShowLogs);
+
     const { rootPrefix, version, solver } = getExtensionConfig();
     if (!rootPrefix || !version || !solver) {
         return new vscode.Hover('Configurações de rootPrefix, versão ou solver não estão definidas.');
@@ -83,24 +98,37 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     // HoverProvider para exibir a descrição ao passar o mouse sobre uma keyword
-    const hoverProvider = vscode.languages.registerHoverProvider('cmgLang', {
+    const hoverProvider = vscode.languages.registerHoverProvider(
+        { scheme: 'file', pattern: '**/*.{dat,inc}' }, {
         provideHover(document, position, token) {
 
             const range = document.getWordRangeAtPosition(position);
-            const keyword = document.getText(range).toUpperCase().trim();
-            console.log(`Keyword capturada no hover: ${keyword}`);
+            const lineText = document.lineAt(position).text.trim();  // Captura a linha completa onde o cursor está
+
+            // Verificar se a linha começa com a keyword no formato correto (pode ter espaços ou * antes)
+            const keywordPattern = /^[\s\*]*([A-Z-]{2,}[A-Z0-9-]*)/;
+            const match = lineText.match(keywordPattern);
+
+            if (!match) {
+              // Se a keyword não corresponder ao padrão ou não estiver na posição correta, não faça nada
+              return;
+            }
+
+            const keyword = match[1].toUpperCase().trim();  // Extrai a keyword do match
+
+            outLog.appendLine(`Keyword capturada no hover: ${keyword}`);
 
             const keywordInfo = searchKeyword(keyword);
 
             if (!keywordInfo) {
-                return new vscode.Hover(`Nenhuma documentação encontrada para a keyword: ${keyword}`);
+              return new vscode.Hover(`Nenhuma documentação encontrada para a keyword: ${keyword}`);
             }
 
             const hoverContent = new vscode.MarkdownString();
-            hoverContent.appendMarkdown(`**${keyword}**\n\n`);
+            hoverContent.appendMarkdown(`📖 **${keyword}**\n\n`);
             hoverContent.appendMarkdown(`${keywordInfo.description}\n\n`);
-            console.log(`Keyword passada para o comando cmghelp.openKeywordDocumentation: ${keyword}`);
-            hoverContent.appendMarkdown(`[Mais informações](command:cmghelp.openKeywordDocumentation?${encodeURIComponent(JSON.stringify(keyword))})`);
+            outLog.appendLine(`Keyword passada para o comando cmghelp.openKeywordDocumentation: ${keyword}`);
+            hoverContent.appendMarkdown(`🔗 [Mais informações](command:cmghelp.openKeywordDocumentation?${encodeURIComponent(JSON.stringify(keyword))})`);
 
             // Permitir que o link de "Mais informações" seja clicável
             hoverContent.isTrusted = true;
@@ -113,8 +141,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('cmghelp.openKeywordDocumentation', (keyword: string) => {
         const { rootPrefix, version, solver } = getExtensionConfig();
-        //console.log('Config loaded:', rootPrefix, version, solver );
-        console.log('** Vou buscar pela keyword:', keyword);
+        //outLog.appendLine('Config loaded:', rootPrefix, version, solver );
+        outLog.appendLine(`** Vou buscar pela keyword: ${keyword}`);
 
         if (!rootPrefix || !version || !solver) {
             vscode.window.showErrorMessage('Configurações de rootPrefix, versão ou solver não estão definidas.');
@@ -142,7 +170,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         const panel = vscode.window.createWebviewPanel(
             'keywordDocumentation',
-            `${keyword} Documentation`,
+            `${keyword} Doc`,
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -155,7 +183,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Lê o arquivo HTML e ajusta os caminhos das imagens
         fs.readFile(htmlFilePath, 'utf8', (err, data) => {
-            console.log(`Tentando abrir a keyword: ${keyword} no arquivo ${htmlFilePath}`);
+            outLog.appendLine(`Tentando abrir a keyword: ${keyword} no arquivo ${htmlFilePath}`);
             if (err) {
                 vscode.window.showErrorMessage(`Erro ao carregar o arquivo HTML: ${err.message}`);
                 return;

@@ -4,8 +4,8 @@ from bs4 import BeautifulSoup
 
 # Variáveis fornecidas
 root_prefix = 'C:\\Program Files\\CMG\\Manuals'
-version = '2022.10'
-places = ['imex_subdirs', 'gem_subdirs']
+versions = ['2023.10','2022.10']
+places = ['imex_subdirs', 'gem_subdirs', 'stars_subdirs']
 
 imex_subdirs = [
     'IMEX\\Content\\IMEX\\Fluid Model',
@@ -41,16 +41,31 @@ gem_subdirs = [
     'GEM\\Content\\COMMON\\Reservoir Description',
 ]
 
+stars_subdirs = [
+    'STARS\\Content\\STARS\\Fluid Model',
+    'STARS\\Content\\STARS\\Initial Conditions',
+    'STARS\\Content\\STARS\\IO Control',
+    'STARS\\Content\\STARS\\Numerical Methods',
+    'STARS\\Content\\STARS\\Other Reservoir Properties',
+    'STARS\\Content\\STARS\\Recurrent Data',
+    'STARS\\Content\\STARS\\Reservoir Description',
+    'STARS\\Content\\STARS\\Rock Fluid Properties',
+    'STARS\\Content\\STARS\\Tracer Data',
+    'STARS\\Content\\COMMON\\Geomechanics',
+    'STARS\\Content\\COMMON\\Keyword System',
+    'STARS\\Content\\COMMON\\Numerical Methods',
+    'STARS\\Content\\COMMON\\Recurrent Data',
+    'STARS\\Content\\COMMON\\Reservoir Description',
+]
+
 # Estrutura de dados para armazenar as informações
 keyword_data = {
-    'prefix': root_prefix + '\\' + version,
-    'version': {
-        version: {
-            'IMEX': {},
-            'GEM': {}
-        }
+    'prefix': root_prefix,
+    'versions' :  {}
     }
-}
+
+for version in versions:
+    keyword_data['versions'][version] = {'IMEX': {}, 'GEM': {} }
 
 # Função para verificar e processar os arquivos .htm
 def process_htm_files(htm_dir, app_name):
@@ -66,7 +81,7 @@ def process_htm_files(htm_dir, app_name):
                 if keyword and description:
                     # Adicionar na estrutura de dados
                     file_relative = os.path.relpath(file_path, root_prefix + '\\' + version)
-                    keyword_data['version'][version][app_name][keyword] = {
+                    keyword_data['versions'][version][app_name][keyword] = {
                         'description': description,
                         'file': file_relative.replace("/", "\\")
                     }
@@ -103,10 +118,11 @@ def extract_keyword_and_description(file_path):
 for place in places:
     subdirs = globals()[place]  # Acessa as subdiretórias (imex_subdirs ou gem_subdirs) dinamicamente
     app_name = 'IMEX' if place == 'imex_subdirs' else 'GEM'
-    
+
     for subdir in subdirs:
-        htm_dir = os.path.join(root_prefix, version, subdir)
-        process_htm_files(htm_dir, app_name)
+        for version in versions:
+            htm_dir = os.path.join(root_prefix, version, subdir)
+            process_htm_files(htm_dir, app_name)
 
 # Salvar os dados em um arquivo JSON
 with open('CMGKeywords.json', 'w', encoding='utf-8') as json_file:

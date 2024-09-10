@@ -1,11 +1,11 @@
 {
-  "name": "cmg-help",
-  "displayName": "CMGHelp",
+  "name": "cmghelp",
+  "displayName": "CMG Help",
   "description": "CMG Syntax Help",
-  "publisher": "rogerio.cunha",
-  "version": "0.0.1",
+  "publisher": "rogerio-cunha",
+  "version": "0.0.5",
   "engines": {
-    "vscode": "^1.38.0"
+    "vscode": "^1.54.0"
   },
   "categories": [
     "Programming Languages",
@@ -22,28 +22,22 @@
   "main": "./out/extension.js",
 
   "contributes": {
-    "languages": [
-      {
-          "id": "cmgLang",
-          "extensions": [".dat", ".inc"],
-          "configuration": "./language-configuration.json"
-      }
-    ],
+
     "commands": [
       {
         "command": "cmghelp.openKeywordUrl",
         "title": "Open Keyword Documentation"
       },
       {
-        "command": "cmghelp.version",
-        "title": "Versão do CMG Help",
+        "command": "cmghelp.showLogs",
+        "title": "CMG Help - show logs",
         "category": "CMG"
       }
     ],
     "menus" : {
       "commandPalette": [
         {
-          "command": "cmghelp.version"
+          "command": "cmghelp.showLogs"
         }
       ]
     },
@@ -58,14 +52,15 @@
           },
           "cmghelp.version": {
               "type": "string",
-              "default": "2022.10",
+              "enum": ["2022.10","2023.10"],
+              "default": "2023.10",
               "description": "Version of the manuals"
           },
           "cmghelp.solver": {
               "type": "string",
-              "enum": ["IMEX", "GEM"],
+              "enum": ["IMEX", "GEM", "STARS"],
               "default": "IMEX",
-              "description": "Solver being used (IMEX or GEM) to doc lookup"
+              "description": "Preferred solver  (IMEX, GEM or STARS) being used to doc lookup"
           },
           "cmghelp.keywordDataPath": {
             "type": "string",
@@ -84,7 +79,7 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.93.0",
+    "@types/vscode": "^1.54.0",
     "@types/mocha": "^10.0.7",
     "@types/node": "20.x",
     "@typescript-eslint/eslint-plugin": "^8.3.0",
