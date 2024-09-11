@@ -2,8 +2,11 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
+type MergedKeywords =  { [key: string]: { description: string, file: string } }
+
 // Variável global que contém os dados das keywords
-let keywordData: { [key: string]: { description: string, file: string } } = {};
+let mergedKeywords: MergedKeywords = {};
+let availableVersions: string[];
 
 let outLog: vscode.OutputChannel;
 
@@ -12,12 +15,23 @@ function getExtensionConfig() {
     const rootPrefix = config.get<string>('rootPrefix');
     const version = config.get<string>('version');
     const solver = config.get<string>('solver');
-    return { rootPrefix, version, solver };
+    const keywordDataPath = config.get<string>('cmghelp.keywordDataPath');
+    return { rootPrefix, version, solver, keywordDataPath };
 }
 
+/**
+ * Carrega do arquivo CMGKeywords.json para popular tanto o mergedKeywords
+ * quanto o availableVersion. O código tenta priorizar as keywords do solver
+ * escolhido (GEM,IMEX,STARS) trazendo também as keywords dos outros solvers
+ * para serem resolvidas caso o solver configurado  não tenha determinada keyword.
+ * @param rootPrefix
+ * @param version
+ * @param preferredSolver
+ * @returns {MergedKeywords,availableVersions}
+ */
 function loadKeywordData(rootPrefix: string, version: string, preferredSolver: string) {
-    const config = vscode.workspace.getConfiguration('cmghelp');
-    let keywordDataPath = config.get<string>('cmghelp.keywordDataPath');
+
+    let { keywordDataPath } = getExtensionConfig();
 
     // Se o caminho não foi definido, usa o diretório home do usuário como padrão
     if (!keywordDataPath) {
@@ -33,19 +47,21 @@ function loadKeywordData(rootPrefix: string, version: string, preferredSolver: s
 
     const rawData = fs.readFileSync(keywordDataPath, 'utf8');
     const keywordData = JSON.parse(rawData);
+    const availableVersions = Object.keys(keywordData.versions);
 
     // Verifica se a versão existe
     if (!keywordData.versions[version]) {
-        vscode.window.showErrorMessage(`A versão ${version} não foi encontrada no CMGKeywords.json.`);
-        outLog.appendLine(`As versões disponíveis são: ${Object.keys(keywordData.versions).join(', ')}`);
-        return null;
+        vscode.window.showInformationMessage(`A versão ${version} não foi encontrada no CMGKeywords.json. Vou usar ${availableVersions[0]}.`);
+        outLog.appendLine(`As versões disponíveis são: ${availableVersions.join(', ')}`);
+        outLog.appendLine(`A versão ${version} não foi encontrada no CMGKeywords.json. Vou usar ${availableVersions[0]}.`);
+        version=availableVersions[0];
     }
     const versionData = keywordData.versions[version];
     // Inicializa o objeto para armazenar as keywords mescladas
-    let mergedKeywords: any = {};
+    let mergedKeywords: MergedKeywords = {};
 
     // Carregar o solver não preferido primeiro
-    const solverOrder = 
+    const solverOrder =
         preferredSolver === 'IMEX' ? ['STARS', 'GEM', 'IMEX'] :
         preferredSolver === 'GEM' ? ['STARS', 'IMEX', 'GEM'] :
         preferredSolver === 'STARS' ? ['IMEX', 'GEM', 'STARS'] : [];
@@ -61,12 +77,12 @@ function loadKeywordData(rootPrefix: string, version: string, preferredSolver: s
         mergedKeywords = { ...mergedKeywords, ...versionData[preferredSolver] };  // Sobrescreve com o solver preferido
     }
 
-    return mergedKeywords;  // Retorna as keywords mescladas
+    return { mergedKeywords, availableVersions};  // Retorna as keywords mescladas
 }
 
 // Função para buscar a keyword com base nas configurações do usuário
 function searchKeyword(keyword: string) {
-    const solverData = keywordData[keyword];
+    const solverData = mergedKeywords[keyword];
 
     if (!solverData) {
         //vscode.window.showErrorMessage(`A keyword ${keyword} não foi encontrada para o solver ${solver}.`);
@@ -91,13 +107,16 @@ export function activate(context: vscode.ExtensionContext) {
     if (!rootPrefix || !version || !solver) {
         return new vscode.Hover('Configurações de rootPrefix, versão ou solver não estão definidas.');
     }
-    keywordData = loadKeywordData(rootPrefix, version, solver);
-
-    if (!keywordData) {
+    const result = loadKeywordData(rootPrefix, version, solver);
+    if (result) {
+        mergedKeywords = result.mergedKeywords;
+        availableVersions  = result.availableVersions;
+    }
+    else {
         return new vscode.Hover('O arquivo keywordData.json não foi carregado corretamente.');
     }
 
-    // HoverProvider para exibir a descrição ao passar o mouse sobre uma keyword
+    // HoverProvider para exibir a descrição sintética ao passar o mouse sobre uma keyword
     const hoverProvider = vscode.languages.registerHoverProvider(
         { scheme: 'file', pattern: '**/*.{dat,inc}' }, {
         provideHover(document, position, token) {
@@ -142,6 +161,11 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(hoverProvider);
 
+    /**
+     * Carrega o arquivo htm da documentação, para a keyword escolhida e
+     * apresenta no webview. O htm é preprocessado para permitir funcionar
+     * corretamente no webview.
+     */
     vscode.commands.registerCommand('cmghelp.openKeywordDocumentation', (keyword: string) => {
         const { rootPrefix, version, solver } = getExtensionConfig();
         //outLog.appendLine('Config loaded:', rootPrefix, version, solver );
@@ -152,23 +176,31 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        if (!keywordData) {
+        if (!mergedKeywords) {
+            outLog.appendLine(`Não há uma estrutura de dados de keywords carregada em memória`);
             return;
         }
 
         let keywordInfo = searchKeyword(keyword);
 
         if (!keywordInfo) {
-            vscode.window.showErrorMessage(`Nenhuma documentação encontrada para o caminho ${rootPrefix} ou keyword ${keyword}`);
+            vscode.window.showErrorMessage(`Keyword ${keyword} não encontrada em memória`);
             return;
         }
 
-        const htmlFilePath = path.join(rootPrefix, version, keywordInfo.file);
+        let htmlFilePath = path.join(rootPrefix, version, keywordInfo.file);
 
         // Verifica se o arquivo existe
         if (!fs.existsSync(htmlFilePath)) {
-            vscode.window.showErrorMessage(`O arquivo de documentação ${htmlFilePath} não foi encontrado.`);
-            return;
+            for (const version of availableVersions) {
+                htmlFilePath = path.join(rootPrefix, version, keywordInfo.file);
+                if (fs.existsSync(htmlFilePath)) {
+                    outLog.appendLine(`Encontrados os manuais em ${htmlFilePath}`);
+                    break;
+                }
+                vscode.window.showErrorMessage(`A pasta de instalação do CMG (${htmlFilePath}) para os manuais não foi encontrada.`);
+                return;
+            }
         }
 
         const panel = vscode.window.createWebviewPanel(
@@ -197,6 +229,9 @@ export function activate(context: vscode.ExtensionContext) {
         });
     });
 
+    /**
+     * Comando para habilitar a extensão
+     */
     vscode.commands.registerCommand('cmghelp.enable', () => {
         // Atualizar a configuração para definir cmghelp.disable como false
         vscode.workspace.getConfiguration().update('cmghelp.disable', false, vscode.ConfigurationTarget.Global)
@@ -209,7 +244,9 @@ export function activate(context: vscode.ExtensionContext) {
             });
     });
 
-    // Comando para desabilitar a extensão
+    /**
+     * Comando para desabilitar a extensão
+     */
     vscode.commands.registerCommand('cmghelp.disable', () => {
         // Atualizar a configuração para definir cmghelp.disable como true
         vscode.workspace.getConfiguration().update('cmghelp.disable', true, vscode.ConfigurationTarget.Global)
@@ -222,6 +259,9 @@ export function activate(context: vscode.ExtensionContext) {
             });
     });
 
+    /**
+     * Altera os links do htm carregado para funcionar com o esquema asWebView do VSCODE
+     */
     function adjustHtmlReferences(htmlContent: string, htmlFilePath: string, panel: vscode.WebviewPanel): string {
         // Ajustar referências de CSS
         htmlContent = htmlContent.replace(/<link.*?href="(.*?)".*?>/g, (match, cssPath) => {

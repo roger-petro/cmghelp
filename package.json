@@ -62,7 +62,6 @@
           },
           "cmghelp.version": {
               "type": "string",
-              "enum": ["2022.10","2023.10"],
               "default": "2023.10",
               "description": "Version of the manuals"
           },
