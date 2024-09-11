@@ -3,7 +3,7 @@
   "displayName": "CMG Help",
   "description": "CMG Syntax Help",
   "publisher": "rogerio-cunha",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "engines": {
     "vscode": "^1.54.0"
   },
@@ -29,8 +29,18 @@
         "title": "Open Keyword Documentation"
       },
       {
+        "command": "cmghelp.enable",
+        "title": "Enable Plugin",
+        "category": "CMG"
+      },
+      {
+        "command": "cmghelp.disable",
+        "title": "Disable Plugin",
+        "category": "CMG"
+      },
+      {
         "command": "cmghelp.showLogs",
-        "title": "CMG Help - show logs",
+        "title": "Show Logs",
         "category": "CMG"
       }
     ],
@@ -66,6 +76,11 @@
             "type": "string",
             "default": "${env:USERPROFILE}\\CMGKeywords.json",
             "description": "Path to the CMGKeywords.json file"
+          },
+          "cmghelp.disable": {
+            "type": "boolean",
+            "default": false,
+            "description": "Disable Plugin Actions"
           }
       }
     }

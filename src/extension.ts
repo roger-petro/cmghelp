@@ -101,7 +101,10 @@ export function activate(context: vscode.ExtensionContext) {
     const hoverProvider = vscode.languages.registerHoverProvider(
         { scheme: 'file', pattern: '**/*.{dat,inc}' }, {
         provideHover(document, position, token) {
-
+            const isDisable = vscode.workspace.getConfiguration().get('cmghelp.disable', false);
+            if (isDisable) {
+                return null;
+            }
             const range = document.getWordRangeAtPosition(position);
             const lineText = document.lineAt(position).text.trim();  // Captura a linha completa onde o cursor está
 
@@ -192,6 +195,31 @@ export function activate(context: vscode.ExtensionContext) {
             const adjustedHtmlContent = adjustHtmlReferences(data, htmlFilePath, panel);
             panel.webview.html = adjustedHtmlContent;
         });
+    });
+
+    vscode.commands.registerCommand('cmghelp.enable', () => {
+        // Atualizar a configuração para definir cmghelp.disable como false
+        vscode.workspace.getConfiguration().update('cmghelp.disable', false, vscode.ConfigurationTarget.Global)
+            .then(() => {
+                vscode.window.showInformationMessage('CMG Help has been enabled.');
+                outLog.appendLine('CMG Help has been enabled.');
+            }, err => {
+                vscode.window.showErrorMessage(`Failed to enable CMG Help: ${err}`);
+                outLog.appendLine(`Failed to enable CMG Help: ${err}`);
+            });
+    });
+
+    // Comando para desabilitar a extensão
+    vscode.commands.registerCommand('cmghelp.disable', () => {
+        // Atualizar a configuração para definir cmghelp.disable como true
+        vscode.workspace.getConfiguration().update('cmghelp.disable', true, vscode.ConfigurationTarget.Global)
+            .then(() => {
+                vscode.window.showInformationMessage('CMG Help has been disabled.');
+                outLog.appendLine('CMG Help has been disabled.');
+            }, err => {
+                vscode.window.showErrorMessage(`Failed to disable CMG Help: ${err}`);
+                outLog.appendLine(`Failed to disable CMG Help: ${err}`);
+            });
     });
 
     function adjustHtmlReferences(htmlContent: string, htmlFilePath: string, panel: vscode.WebviewPanel): string {

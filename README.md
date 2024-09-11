@@ -20,8 +20,9 @@ After installing the extension, you must configure the following settings for it
 
 - **`cmghelp.rootPrefix`**: The root directory where the CMG Manuals are stored (default: `C:\Program Files\CMG\Manuals`).
 - **`cmghelp.version`**: The version of the CMG Manuals you are using (default: `2022.10`).
-- **`cmghelp.solver`**: The solver being used, either **IMEX** or **GEM**.
+- **`cmghelp.solver`**: The solver being used, either **IMEX**, **GEM** or **STARS**.
 - **`cmghelp.keywordDataPath`**: The path to the `CMGKeywords.json` file, which contains the keyword data. By default, it is located in the user's home directory (`C:\Users\<YourUser>\CMGKeywords.json` on Windows).
+- **`cmghelp.disable`**: Toggles the plugin functionality on or off. You can also enable or disable the plugin through the command palette by searching for `CMG: Enable Plugin` or `CMG: Disable Plugin`.
 
 ### 2. Generate the `CMGKeywords.json` File
 
@@ -40,3 +41,7 @@ The extension requires a `CMGKeywords.json` file to function, which contains the
 4. Edit parsedoc.py to change/add/remove htm documentation directories, if needed
 5. Run `python .\parsedoc.py`. A CMGKeywords.json will be created at the same script's directory
 6. Copy the CMGKeyword.json to your home dir, according configuration above.
+
+### Support
+
+If you encounter any issues, please attach the plugin log on the GitHub issue page. The log can be accessed using the command `CMG: Show Logs`.
