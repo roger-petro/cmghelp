@@ -51,9 +51,10 @@ function loadKeywordData(rootPrefix: string, version: string, preferredSolver: s
 
     // Verifica se a versão existe
     if (!keywordData.versions[version]) {
-        vscode.window.showInformationMessage(`A versão ${version} não foi encontrada no CMGKeywords.json. Vou usar ${availableVersions[0]}.`);
+        const msg = `A versão ${version} inexiste em CMGKeywords.json. Usando ${availableVersions[0]}.`;
+        //vscode.window.showInformationMessage(msg);
         outLog.appendLine(`As versões disponíveis são: ${availableVersions.join(', ')}`);
-        outLog.appendLine(`A versão ${version} não foi encontrada no CMGKeywords.json. Vou usar ${availableVersions[0]}.`);
+        outLog.appendLine(msg);
         version=availableVersions[0];
     }
     const versionData = keywordData.versions[version];
@@ -180,20 +181,32 @@ export function activate(context: vscode.ExtensionContext) {
             outLog.appendLine(`Não há uma estrutura de dados de keywords carregada em memória`);
             return;
         }
+        let htmlFilePath = '';
+        let keywordInfo;
+        let fileEnd='';
 
-        let keywordInfo = searchKeyword(keyword);
+        if (keyword.indexOf(".htm") === -1) {
 
-        if (!keywordInfo) {
-            vscode.window.showErrorMessage(`Keyword ${keyword} não encontrada em memória`);
-            return;
+            keywordInfo = searchKeyword(keyword);
+
+            if (!keywordInfo) {
+                vscode.window.showErrorMessage(`Keyword ${keyword} não encontrada em memória`);
+                return;
+            }
+            fileEnd = keywordInfo.file;
+            htmlFilePath = path.join(rootPrefix, version, keywordInfo.file);
         }
-
-        let htmlFilePath = path.join(rootPrefix, version, keywordInfo.file);
+        else {
+            console.log('Veio este htm: ',keyword);
+            fileEnd = keyword.split('#')[0];
+            htmlFilePath = path.join(rootPrefix,version,fileEnd);
+            keyword = path.basename(keyword).split('_')[0];
+        }
 
         // Verifica se o arquivo existe
         if (!fs.existsSync(htmlFilePath)) {
             for (const version of availableVersions) {
-                htmlFilePath = path.join(rootPrefix, version, keywordInfo.file);
+                htmlFilePath = path.join(rootPrefix, version, fileEnd);
                 if (fs.existsSync(htmlFilePath)) {
                     outLog.appendLine(`Encontrados os manuais em ${htmlFilePath}`);
                     break;
@@ -224,8 +237,14 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const adjustedHtmlContent = adjustHtmlReferences(data, htmlFilePath, panel);
+            const adjustedHtmlContent = adjustHtmlReferences(data, htmlFilePath, fileEnd, panel);
             panel.webview.html = adjustedHtmlContent;
+            panel.webview.onDidReceiveMessage(async (message:any) => {
+                outLog.appendLine('Recebido este evento: ' + decodeURIComponent(message.command));
+                outLog.appendLine('Recebido este evento: '+ decodeURIComponent(message.originalPath));
+                const uri = path.join(decodeURIComponent(message.originalPath),decodeURIComponent(message.command).split('?')[1].replaceAll('"',''));
+                vscode.commands.executeCommand('cmghelp.openKeywordDocumentation',uri);
+            });
         });
     });
 
@@ -262,7 +281,7 @@ export function activate(context: vscode.ExtensionContext) {
     /**
      * Altera os links do htm carregado para funcionar com o esquema asWebView do VSCODE
      */
-    function adjustHtmlReferences(htmlContent: string, htmlFilePath: string, panel: vscode.WebviewPanel): string {
+    function adjustHtmlReferences(htmlContent: string, htmlFilePath: string, fileEnd:string, panel: vscode.WebviewPanel): string {
         // Ajustar referências de CSS
         htmlContent = htmlContent.replace(/<link.*?href="(.*?)".*?>/g, (match, cssPath) => {
             const cssUri = panel.webview.asWebviewUri(vscode.Uri.file(path.join(path.dirname(htmlFilePath), cssPath)));
@@ -287,11 +306,6 @@ export function activate(context: vscode.ExtensionContext) {
             return match.replace(linkPath, `command:cmghelp.openKeywordDocumentation?${encodeURIComponent(JSON.stringify(linkPath))}`);
         });
 
-        htmlContent = htmlContent.replace(/<a.*?href="(.*?)".*?>/g, (match, linkPath) => {
-            const keyword = path.basename(linkPath, path.extname(linkPath)).toUpperCase();
-            return match.replace(linkPath, `command:cmghelp.openKeywordDocumentation?${encodeURIComponent(JSON.stringify(linkPath))}`);
-        });
-
         // Adicionar script para capturar cliques em links
         const script = `
         <script>
@@ -302,7 +316,8 @@ export function activate(context: vscode.ExtensionContext) {
                     if (target && target.href.startsWith('command:cmghelp.openKeywordDocumentation')) {
                         event.preventDefault();
                         const commandUri = target.href.split('command:')[1];
-                        vscode.postMessage({ command: commandUri }); // Envia mensagens usando a instância armazenada
+                        vscode.postMessage({ command: commandUri, originalPath: "${encodeURIComponent(path.dirname(fileEnd))}" }); // Envia mensagens usando a instância armazenada
+                        //console.log('PostMessage enviado com ', commandUri)
                     }
                 });
             })();
