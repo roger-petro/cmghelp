@@ -95,66 +95,39 @@ def extract_keywords_and_descriptions(file_path):
 
     keywords_and_descriptions = []
 
-    # Encontra o primeiro <div> que segue o <body>
+    # 1 - Encontra o primeiro <div> que segue o <body>
     body = soup.find('body')
-    main_div = body.find('div', recursive=False)  # Busca o primeiro <div> diretamente sob o <body>
+    main_div = body.find('div', recursive=False)  # Primeiro <div> diretamente sob o <body>
 
-    # Agora, encontra o primeiro <h2> dentro deste <div>
-    h2 = main_div.find('h2', recursive=False)  # Busca o primeiro <h2> diretamente sob o <div>
+    # 2 - Encontra o primeiro <h2> dentro deste <div>
+    h2 = main_div.find('h2', recursive=False)  # Primeiro <h2> diretamente dentro do <div>
 
-    # Se não houver <h2>, retorna vazio
     if not h2:
-        return keywords_and_descriptions
+        return keywords_and_descriptions  # Se não houver <h2>, retorna vazio
 
-    # Encontra o cabeçalho <h3>PURPOSE:</h3> logo após o <h2>
+    # 2 - Encontra todas as keywords dentro deste <h2>
+    keyword_spans = h2.find_all('span', class_='keyword')
+    keywords = [kw.text.strip().lstrip('*') for kw in keyword_spans]  # Limpa espaços e o '*'
+
+    # 3 - Encontra o <h3>PURPOSE:</h3> e todos os <p> subsequentes
     purpose_header = h2.find_next('h3', text='PURPOSE:')
     if not purpose_header:
-        return keywords_and_descriptions
+        return keywords_and_descriptions  # Se não encontrar <h3>PURPOSE:</h3>, retorna vazio
 
-    # Verifica se há um <h3>ARRAY:</h3> logo após o <h3>PURPOSE:</h3>
-    array_header = purpose_header.find_next('h3', text='ARRAY:')
+    # 4 - Encontra todos os <p> subsequentes até encontrar o próximo <h3> ou outro elemento que não seja <p>
+    description_parts = []
+    for sibling in purpose_header.find_next_siblings():
+        if sibling.name == 'h3' or sibling.name != 'p':  # Para se encontrar o próximo <h3> ou algo que não seja <p>
+            break
+        if sibling.name == 'p':
+            description_parts.append(sibling.get_text(separator=" ", strip=True))  # Adiciona o texto do <p>
 
-    # Caso 1: Se existir ARRAY, as keywords vêm dos siblings do PURPOSE, parando em ARRAY
-    if array_header:
-        for sibling in purpose_header.find_all_next():
-            if sibling == array_header:
-                break
-            if sibling.name == 'p':
-                keyword_span = sibling.find('span', class_='keyword')
-                if keyword_span:
-                    keyword = keyword_span.text.strip().lstrip('*')
-                    description = sibling.get_text(separator=" ", strip=True)
-                    keywords_and_descriptions.append((keyword, description))
-        return keywords_and_descriptions  # Retorna assim que o caso 1 for tratado
+    # Concatena todas as partes da descrição, separadas por quebras de linha
+    description = "\n".join(description_parts)
 
-    # Caso 3: Se houver mais de uma keyword no <h2>, cada uma terá a mesma descrição do PURPOSE
-    keyword_spans = h2.find_all('span', class_='keyword')
-    if len(keyword_spans) > 1:
-        # Extrai a descrição do PURPOSE
-        description = ""
-        for sibling in purpose_header.find_next_siblings():
-            if sibling.name == 'h3':  # Parar se encontrar o próximo título <h3>
-                break
-            if sibling.name == 'p':
-                description += sibling.get_text(separator=" ", strip=True) + " "
-
-        # Para cada keyword no <h2>, cria uma entrada com a mesma descrição
-        for keyword_span in keyword_spans:
-            keyword = keyword_span.text.strip().lstrip('*')
-            keywords_and_descriptions.append((keyword, description.strip()))
-        return keywords_and_descriptions  # Retorna assim que o caso 3 for tratado
-
-    # Caso 2: Se não houver ARRAY e apenas uma keyword no <h2>
-    elif len(keyword_spans) == 1:
-        keyword = keyword_spans[0].text.strip().lstrip('*')
-        description = ""
-        for sibling in purpose_header.find_next_siblings():
-            if sibling.name == 'h3':  # Parar se encontrar o próximo título <h3>
-                break
-            if sibling.name == 'p':
-                description += sibling.get_text(separator=" ", strip=True) + " "
-        keywords_and_descriptions.append((keyword, description.strip()))
-        return keywords_and_descriptions  # Retorna assim que o caso 2 for tratado
+    # 5 - Gera um par de cada keyword com a mesma descrição
+    for keyword in keywords:
+        keywords_and_descriptions.append((keyword, description))
 
     return keywords_and_descriptions
 
