@@ -61,11 +61,11 @@ stars_subdirs = [
 # Estrutura de dados para armazenar as informações
 keyword_data = {
     'prefix': root_prefix,
-    'versions' :  {}
-    }
+    'versions': {}
+}
 
 for version in versions:
-    keyword_data['versions'][version] = {'IMEX': {}, 'GEM': {} }
+    keyword_data['versions'][version] = {'IMEX': {}, 'GEM': {}, 'STARS': {}}
 
 # Função para verificar e processar os arquivos .htm
 def process_htm_files(htm_dir, app_name):
@@ -76,48 +76,92 @@ def process_htm_files(htm_dir, app_name):
         for file_name in os.listdir(htm_dir):
             if file_name.endswith('.htm'):
                 file_path = os.path.join(htm_dir, file_name)
-                keyword, description = extract_keyword_and_description(file_path)
+                keyword_descriptions = extract_keywords_and_descriptions(file_path)
 
-                if keyword and description:
-                    # Adicionar na estrutura de dados
+                if len(keyword_descriptions) > 0:
+                    # Adicionar cada keyword e descrição na estrutura de dados
                     file_relative = os.path.relpath(file_path, root_prefix + '\\' + version)
-                    keyword_data['versions'][version][app_name][keyword] = {
-                        'description': description,
-                        'file': file_relative.replace("/", "\\")
-                    }
+                    for keyword, description in keyword_descriptions:
+                        keyword_data['versions'][version][app_name][keyword] = {
+                            'description': description,
+                            'file': file_relative.replace("/", "\\")
+                        }
     else:
         print(f'ERRO: O diretório {htm_dir} não existe.')
 
-# Função para extrair keyword e description dos arquivos .htm
-def extract_keyword_and_description(file_path):
+def extract_keywords_and_descriptions(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
         soup = BeautifulSoup(file, 'html.parser')
 
-        # Encontra a keyword dentro da tag <span class="keyword">
-        keyword_span = soup.find('span', class_='keyword')
-        if keyword_span:
-            keyword = keyword_span.text.strip().strip('*')
+    keywords_and_descriptions = []
 
-            # Tenta encontrar o conteúdo da seção "PURPOSE"
-            purpose_header = soup.find('h3', text='PURPOSE:')
-            description = ""
+    # Encontra o primeiro <div> que segue o <body>
+    body = soup.find('body')
+    main_div = body.find('div', recursive=False)  # Busca o primeiro <div> diretamente sob o <body>
 
-            if purpose_header:
-                # Procura por todos os <p> que vêm logo após o "PURPOSE:"
-                for sibling in purpose_header.find_next_siblings():
-                    if sibling.name == 'h3':  # Parar se encontrar o próximo título <h3>
-                        break
-                    if sibling.name == 'p':  # Coletar o texto dos parágrafos <p>
-                        description += sibling.get_text(separator=" ", strip=True) + " "
+    # Agora, encontra o primeiro <h2> dentro deste <div>
+    h2 = main_div.find('h2', recursive=False)  # Busca o primeiro <h2> diretamente sob o <div>
 
-            return keyword, description.strip()  # Remove espaços extras no final
+    # Se não houver <h2>, retorna vazio
+    if not h2:
+        return keywords_and_descriptions
 
-    return None, None
+    # Encontra o cabeçalho <h3>PURPOSE:</h3> logo após o <h2>
+    purpose_header = h2.find_next('h3', text='PURPOSE:')
+    if not purpose_header:
+        return keywords_and_descriptions
 
-# Iterar pelas subdiretórias IMEX e GEM
+    # Verifica se há um <h3>ARRAY:</h3> logo após o <h3>PURPOSE:</h3>
+    array_header = purpose_header.find_next('h3', text='ARRAY:')
+
+    # Caso 1: Se existir ARRAY, as keywords vêm dos siblings do PURPOSE, parando em ARRAY
+    if array_header:
+        for sibling in purpose_header.find_all_next():
+            if sibling == array_header:
+                break
+            if sibling.name == 'p':
+                keyword_span = sibling.find('span', class_='keyword')
+                if keyword_span:
+                    keyword = keyword_span.text.strip().lstrip('*')
+                    description = sibling.get_text(separator=" ", strip=True)
+                    keywords_and_descriptions.append((keyword, description))
+        return keywords_and_descriptions  # Retorna assim que o caso 1 for tratado
+
+    # Caso 3: Se houver mais de uma keyword no <h2>, cada uma terá a mesma descrição do PURPOSE
+    keyword_spans = h2.find_all('span', class_='keyword')
+    if len(keyword_spans) > 1:
+        # Extrai a descrição do PURPOSE
+        description = ""
+        for sibling in purpose_header.find_next_siblings():
+            if sibling.name == 'h3':  # Parar se encontrar o próximo título <h3>
+                break
+            if sibling.name == 'p':
+                description += sibling.get_text(separator=" ", strip=True) + " "
+
+        # Para cada keyword no <h2>, cria uma entrada com a mesma descrição
+        for keyword_span in keyword_spans:
+            keyword = keyword_span.text.strip().lstrip('*')
+            keywords_and_descriptions.append((keyword, description.strip()))
+        return keywords_and_descriptions  # Retorna assim que o caso 3 for tratado
+
+    # Caso 2: Se não houver ARRAY e apenas uma keyword no <h2>
+    elif len(keyword_spans) == 1:
+        keyword = keyword_spans[0].text.strip().lstrip('*')
+        description = ""
+        for sibling in purpose_header.find_next_siblings():
+            if sibling.name == 'h3':  # Parar se encontrar o próximo título <h3>
+                break
+            if sibling.name == 'p':
+                description += sibling.get_text(separator=" ", strip=True) + " "
+        keywords_and_descriptions.append((keyword, description.strip()))
+        return keywords_and_descriptions  # Retorna assim que o caso 2 for tratado
+
+    return keywords_and_descriptions
+
+# Iterar pelas subdiretórias IMEX, GEM e STARS
 for place in places:
-    subdirs = globals()[place]  # Acessa as subdiretórias (imex_subdirs ou gem_subdirs) dinamicamente
-    app_name = 'IMEX' if place == 'imex_subdirs' else 'GEM'
+    subdirs = globals()[place]  # Acessa as subdiretórias dinamicamente
+    app_name = 'IMEX' if place == 'imex_subdirs' else 'GEM' if place == 'gem_subdirs' else 'STARS'
 
     for subdir in subdirs:
         for version in versions:
@@ -128,4 +172,4 @@ for place in places:
 with open('CMGKeywords.json', 'w', encoding='utf-8') as json_file:
     json.dump(keyword_data, json_file, indent=4, ensure_ascii=False)
 
-print('Processamento finalizado e arquivo keywordData.json gerado.')
+print('Processamento finalizado e arquivo CMGKeywords.json gerado.')
