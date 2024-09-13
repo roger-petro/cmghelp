@@ -283,6 +283,8 @@ export function activate(context: vscode.ExtensionContext) {
      */
     function adjustHtmlReferences(htmlContent: string, htmlFilePath: string, fileEnd:string, panel: vscode.WebviewPanel): string {
         // Ajustar referências de CSS
+        const isDarkTheme = vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark;
+
         htmlContent = htmlContent.replace(/<link.*?href="(.*?)".*?>/g, (match, cssPath) => {
             const cssUri = panel.webview.asWebviewUri(vscode.Uri.file(path.join(path.dirname(htmlFilePath), cssPath)));
             return match.replace(cssPath, cssUri.toString());
@@ -320,6 +322,24 @@ export function activate(context: vscode.ExtensionContext) {
                         //console.log('PostMessage enviado com ', commandUri)
                     }
                 });
+            })();
+
+            (function() {
+                const isDark = ${isDarkTheme};
+
+                // Cria uma tag <style> e injeta os estilos
+                const style = document.createElement('style');
+                style.textContent = \`
+                    body {
+                        background-color: \${isDark ? '#1e1e1e' : '#ffffff'} !important;
+                        color: \${isDark ? '#d4d4d4' : '#000000'} !important;
+                    }
+                    a {
+                        color: \${isDark ? '#569cd6' : '#0066cc'} !important;
+                    }
+                    /* Outros estilos */
+                \`;
+                document.head.appendChild(style);
             })();
         </script>
         `;
