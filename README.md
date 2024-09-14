@@ -2,7 +2,9 @@
 
 The **CMG Help** extension provides detailed descriptions for keywords used in CMG simulation models, helping users better understand the commands they are using, particularly in High-Performance Computing (HPC) environments. The extension supports both GEM and IMEX solvers, with a customizable keyword system that loads from a `CMGKeywords.json` file.
 
-Please **note** that the CMG keywords do not come bundled with the installation of this extension due to the intellectual property rights of the software manufacturer. Users are required to generate the `CMGKeywords.json` file themselves, provided they have a valid installation of the CMG flow simulator. The provided Python script (`parsedoc.py`) can be used to parse the documentation from an existing installation and create the necessary file for the extension to function.
+Please **note** that the CMG manuals are not bundled with the installation of this extension due to the intellectual property rights of the software manufacturer.
+
+This extension includes a file called CMGKeywords.json, which maps keywords to the location of the HTML manuals on disk, following a standard CMG installation. Eventually, it may be necessary to generate a new version of this file to update the paths or to accommodate a newly installed version. To assist with this, there is a script called parsedoc.py that can scan the disk and create the JSON file, as detailed below.
 
 ## Features
 
@@ -21,12 +23,12 @@ After installing the extension, you must configure the following settings for it
 - **`cmghelp.rootPrefix`**: The root directory where the CMG Manuals are stored (default: `C:\Program Files\CMG\Manuals`).
 - **`cmghelp.version`**: The version of the CMG Manuals you are using (default: `2022.10`).
 - **`cmghelp.solver`**: The solver being used, either **IMEX**, **GEM** or **STARS**.
-- **`cmghelp.keywordDataPath`**: The path to the `CMGKeywords.json` file, which contains the keyword data. By default, it is located in the user's home directory (`C:\Users\<YourUser>\CMGKeywords.json` on Windows).
+- **`cmghelp.keywordDataPath`**: The path to the `CMGKeywords.json` file, which contains the keyword data. By default, it uses one that is bundled.
 - **`cmghelp.disable`**: Toggles the plugin functionality on or off. You can also enable or disable the plugin through the command palette by searching for `CMG: Enable Plugin` or `CMG: Disable Plugin`.
 
 ### 2. Generate the `CMGKeywords.json` File
 
-The extension requires a `CMGKeywords.json` file to function, which contains the descriptions and links for the CMG keywords. You can generate this file by using a Python script provided in the `utils` folder of the extension.
+The extension requires a `CMGKeywords.json` file to function, which contains the links for the CMG htm on disk. You can generate this file by using a Python script provided in the `project's github`.
 
 #### Steps to generate the `CMGKeywords.json` file
 
@@ -40,7 +42,8 @@ The extension requires a `CMGKeywords.json` file to function, which contains the
 
 4. Edit parsedoc.py to change/add/remove htm documentation directories, if needed
 5. Run `python .\parsedoc.py`. A CMGKeywords.json will be created at the same script's directory
-6. Copy the CMGKeyword.json to your home dir, according configuration above.
+6. Copy the CMGKeyword.json to any dir
+7. Setup the `cmghelp.keywordDataPath` on extension configuration.
 
 ### Support
 

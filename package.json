@@ -3,7 +3,7 @@
   "displayName": "CMG Help",
   "description": "CMG Syntax Help",
   "publisher": "rogerio-cunha",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.54.0"
   },
@@ -80,7 +80,7 @@
           "cmghelp.keywordDataPath": {
             "type": "string",
             "default": "",
-            "description": "Path to the CMGKeywords.json file. Default é C:\\Users\\<nome>\\CMGKeywords.json"
+            "description": "Path to the CMGKeywords.json file. Leave it empty to use the embedded file"
           },
           "cmghelp.disable": {
             "type": "boolean",

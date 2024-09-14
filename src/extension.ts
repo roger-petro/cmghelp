@@ -34,25 +34,31 @@ function getExtensionConfig() {
  * Carrega do arquivo CMGKeywords.json
  * @returns CMGKeywords | null
  */
-function loadKeywordData() {
+function loadKeywordData(context: vscode.ExtensionContext, outLog: vscode.OutputChannel) {
 
     let { keywordDataPath } = getExtensionConfig();
 
     // Se o caminho não foi definido, usa o diretório home do usuário como padrão
     if (!keywordDataPath) {
-        const homeDir = require('os').homedir();  // Diretório home do usuário
-        keywordDataPath = path.join(homeDir, 'CMGKeywords.json');
+        // const homeDir = require('os').homedir();  // Diretório home do usuário
+        // keywordDataPath = path.join(homeDir, 'CMGKeywords.json');
+        keywordDataPath = path.join(context.extensionPath, 'CMGKeywords.json');
     }
+    // Carregando o arquivo JSON
 
-    if (!fs.existsSync(keywordDataPath)) {
-        vscode.window.showErrorMessage(`O arquivo CMGKeywords.json não foi encontrado no caminho: ${keywordDataPath}`);
-        outLog.appendLine(`Verifique se o caminho está correto: ${keywordDataPath}`);
-        return null;
+    if (fs.existsSync(keywordDataPath)) {
+        try {
+            const rawData = fs.readFileSync(keywordDataPath, 'utf-8');
+            cmgKeywords = JSON.parse(rawData) as CMGKeywords;
+            outLog.appendLine(`CMGKeywords.json carregado da origem ${keywordDataPath}`);
+            return cmgKeywords;
+        } catch (error: any) {
+            vscode.window.showErrorMessage('Erro ao carregar CMGKeywords.json: ' + error.message);
+        }
+    } else {
+        vscode.window.showErrorMessage('CMGKeywords.json não encontrado.');
     }
-
-    const rawData = fs.readFileSync(keywordDataPath, 'utf8');
-    cmgKeywords = JSON.parse(rawData) as CMGKeywords;
-    return cmgKeywords;
+   return cmgKeywords;
 }
 
 function sortVersions(versions: string[]): string[] {
@@ -168,11 +174,20 @@ export function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(cmgShowLogs);
 
-    const { rootPrefix, preferredVersion, availableSolvers } = getExtensionConfig();
+    let { rootPrefix, preferredVersion, availableSolvers } = getExtensionConfig();
+
+    vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('cmghelp.availableSolvers')) {
+            // Atualiza a configuração se o availableSolvers foi alterado
+            outLog.appendLine('availableSolvers foi alterado, recarregando configurações.');
+            ({ rootPrefix, preferredVersion, availableSolvers } = getExtensionConfig());
+        }
+    });
+
     if (!rootPrefix || !preferredVersion) {
         return new vscode.Hover('Configurações de rootPrefix, versão ou solver não estão definidas.');
     }
-    const keywordData = loadKeywordData();
+    const keywordData = loadKeywordData(context, outLog);
     if (!keywordData) {
         return new vscode.Hover('O arquivo keywordData.json não foi carregado corretamente.');
     }
@@ -235,6 +250,8 @@ export function activate(context: vscode.ExtensionContext) {
         const { rootPrefix, preferredVersion, availableSolvers } = getExtensionConfig();
         //outLog.appendLine('Config loaded:', rootPrefix, version, solver );
         outLog.appendLine(`** Vou buscar pela keyword: ${searchElement}`);
+
+
 
         if (!rootPrefix || !preferredVersion) {
             vscode.window.showErrorMessage('Configurações de rootPrefix, versão ou solver não estão definidas.');
