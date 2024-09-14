@@ -60,21 +60,27 @@
               "default": "C:\\Program Files\\CMG\\Manuals",
               "description": "Root prefix directory where the manuals are stored"
           },
-          "cmghelp.version": {
+          "cmghelp.preferredVersion": {
               "type": "string",
               "default": "2023.10",
-              "description": "Version of the manuals"
+              "pattern": "^[0-9]{4}\\.[0-9]{2}$",
+              "description": "Preferred version of the manual for reference"
           },
-          "cmghelp.solver": {
-              "type": "string",
-              "enum": ["IMEX", "GEM", "STARS"],
-              "default": "IMEX",
-              "description": "Preferred solver  (IMEX, GEM or STARS) being used to doc lookup"
-          },
+          "cmghelp.availableSolvers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["IMEX", "GEM", "STARS"],
+                "description": "Select solvers to be available on description link"
+              },
+              "default": [ "IMEX", "GEM", "STARS"],
+              "uniqueItems": true,
+              "description": "Select at least one solver for reference. Solvers that can be used in the description link"
+            },
           "cmghelp.keywordDataPath": {
             "type": "string",
-            "default": "${env:USERPROFILE}\\CMGKeywords.json",
-            "description": "Path to the CMGKeywords.json file"
+            "default": "",
+            "description": "Path to the CMGKeywords.json file. Default é C:\\Users\\<nome>\\CMGKeywords.json"
           },
           "cmghelp.disable": {
             "type": "boolean",

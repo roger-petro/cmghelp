@@ -2,34 +2,39 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
-type MergedKeywords =  { [key: string]: { description: string, file: string } }
+type CMGKeywords = {
+    prefix?: string; // prefix é opcional
+    versions: {
+        [version: string]: {
+            [solver in "CMG" | "IMEX" | "STARS"]: {
+                [keyword: string]: {
+                    description: string;
+                    file: string;
+                }
+            }
+        }
+    };
+}
 
-// Variável global que contém os dados das keywords
-let mergedKeywords: MergedKeywords = {};
-let availableVersions: string[];
+
+let cmgKeywords: CMGKeywords;
 
 let outLog: vscode.OutputChannel;
 
 function getExtensionConfig() {
     const config = vscode.workspace.getConfiguration('cmghelp');
     const rootPrefix = config.get<string>('rootPrefix');
-    const version = config.get<string>('version');
-    const solver = config.get<string>('solver');
-    const keywordDataPath = config.get<string>('cmghelp.keywordDataPath');
-    return { rootPrefix, version, solver, keywordDataPath };
+    const preferredVersion = config.get<string>('preferredVersion');
+    const availableSolvers = config.get<string[]>('availableSolvers',['GEM']);
+    const keywordDataPath = config.get<string>('keywordDataPath');
+    return { rootPrefix, preferredVersion, availableSolvers, keywordDataPath };
 }
 
 /**
- * Carrega do arquivo CMGKeywords.json para popular tanto o mergedKeywords
- * quanto o availableVersion. O código tenta priorizar as keywords do solver
- * escolhido (GEM,IMEX,STARS) trazendo também as keywords dos outros solvers
- * para serem resolvidas caso o solver configurado  não tenha determinada keyword.
- * @param rootPrefix
- * @param version
- * @param preferredSolver
- * @returns {MergedKeywords,availableVersions}
+ * Carrega do arquivo CMGKeywords.json
+ * @returns CMGKeywords | null
  */
-function loadKeywordData(rootPrefix: string, version: string, preferredSolver: string) {
+function loadKeywordData() {
 
     let { keywordDataPath } = getExtensionConfig();
 
@@ -46,53 +51,112 @@ function loadKeywordData(rootPrefix: string, version: string, preferredSolver: s
     }
 
     const rawData = fs.readFileSync(keywordDataPath, 'utf8');
-    const keywordData = JSON.parse(rawData);
-    const availableVersions = Object.keys(keywordData.versions);
-
-    // Verifica se a versão existe
-    if (!keywordData.versions[version]) {
-        const msg = `A versão ${version} inexiste em CMGKeywords.json. Usando ${availableVersions[0]}.`;
-        //vscode.window.showInformationMessage(msg);
-        outLog.appendLine(`As versões disponíveis são: ${availableVersions.join(', ')}`);
-        outLog.appendLine(msg);
-        version=availableVersions[0];
-    }
-    const versionData = keywordData.versions[version];
-    // Inicializa o objeto para armazenar as keywords mescladas
-    let mergedKeywords: MergedKeywords = {};
-
-    // Carregar o solver não preferido primeiro
-    const solverOrder =
-        preferredSolver === 'IMEX' ? ['STARS', 'GEM', 'IMEX'] :
-        preferredSolver === 'GEM' ? ['STARS', 'IMEX', 'GEM'] :
-        preferredSolver === 'STARS' ? ['IMEX', 'GEM', 'STARS'] : [];
-
-    for (const order of solverOrder) {
-        if (versionData[order]) {
-            mergedKeywords = { ...versionData[order] };  // Carrega as keywords do solver não preferido
-        }
-    }
-
-    // Carregar o solver preferido depois, sobrescrevendo quaisquer conflitos de keyword
-    if (versionData[preferredSolver]) {
-        mergedKeywords = { ...mergedKeywords, ...versionData[preferredSolver] };  // Sobrescreve com o solver preferido
-    }
-
-    return { mergedKeywords, availableVersions};  // Retorna as keywords mescladas
+    cmgKeywords = JSON.parse(rawData) as CMGKeywords;
+    return cmgKeywords;
 }
 
-// Função para buscar a keyword com base nas configurações do usuário
-function searchKeyword(keyword: string) {
-    const solverData = mergedKeywords[keyword];
+function sortVersions(versions: string[]): string[] {
+    return versions.sort((a, b) => {
+        const [yearA, subversionA] = a.split('.').map(Number);
+        const [yearB, subversionB] = b.split('.').map(Number);
 
-    if (!solverData) {
-        //vscode.window.showErrorMessage(`A keyword ${keyword} não foi encontrada para o solver ${solver}.`);
-        console.error(`A keyword ${keyword} não foi encontrada`);
+        if (yearA !== yearB) {
+            return yearB - yearA;  // Compara os anos em ordem decrescente
+        }
+
+        return subversionB - subversionA;  // Compara as subversões em ordem decrescente
+    });
+}
+
+/**
+ * Procura a melhor versão possível para consultar tanto o disco quanto CMGKeywords.
+ * @param cmgKeywords
+ * @param configuredVersion
+ * @returns
+ */
+function findBestVersion(availableVersions: string[], searchVersion: string): string {
+    // Verifica se a versão configurada existe
+    if (availableVersions.includes(searchVersion)) {
+        return searchVersion;  // Retorna a versão configurada se ela for encontrada
+    }
+    // Ordena as versões em ordem decrescente
+    const sortedVersions = sortVersions(availableVersions);
+
+    // Retorna a maior versão (a primeira no array ordenado)
+    return sortedVersions[0];
+}
+
+/**
+ * Procura por todas as versões de fato instaladas no disco
+ * @param rootPrefix
+ * @returns
+ */
+function findAvailableDiskVersions(rootPrefix: string): string[] | null {
+    // Verifica se o diretório existe
+    if (!fs.existsSync(rootPrefix)) {
+        return null;  // Se o diretório não existir, retorna null
+    }
+
+    // Regex para verificar se o nome da pasta tem o formato NNNN.NN
+    const versionRegex = /^[0-9]{4}\.[0-9]{2}$/;
+
+    // Lê o conteúdo do diretório
+    const folders = fs.readdirSync(rootPrefix, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())  // Filtra apenas diretórios
+        .map(dirent => dirent.name)              // Obtém os nomes dos diretórios
+        .filter(name => versionRegex.test(name)); // Filtra os que correspondem ao formato NNNN.NN
+
+    return folders;
+}
+
+function findKeyword(
+    cmgKeywords: CMGKeywords,
+    searchTerm: string,
+    version?: string,
+    solver?: "CMG" | "IMEX" | "STARS"
+): { description: string; file: string } | null {
+
+    // Se a versão e o solver forem fornecidos, procurar apenas nesta seção
+    if (version && solver) {
+        const solvers = cmgKeywords.versions[version];
+        if (solvers) {
+            const keywords = solvers[solver];
+            if (keywords && keywords[searchTerm]) {
+                return keywords[searchTerm];
+            }
+        }
         return null;
     }
 
-    return solverData;
+    // Se apenas a versão for fornecida, procurar em todos os solvers desta versão
+    if (version) {
+        const solvers = cmgKeywords.versions[version];
+        if (solvers) {
+            for (const solverKey of Object.keys(solvers) as Array<keyof typeof solvers>) {
+                const keywords = solvers[solverKey];
+                if (keywords[searchTerm]) {
+                    return keywords[searchTerm];
+                }
+            }
+        }
+        return null;
+    }
+
+    // Caso nem a versão nem o solver sejam fornecidos, procurar em todas as versões e solvers
+    for (const versionKey in cmgKeywords.versions) {
+        const solvers = cmgKeywords.versions[versionKey];
+        for (const solverKey of Object.keys(solvers) as Array<keyof typeof solvers>) {
+            const keywords = solvers[solverKey];
+            if (keywords[searchTerm]) {
+                return keywords[searchTerm];
+            }
+        }
+    }
+
+    // Se não encontrar a keyword, retorna null
+    return null;
 }
+
 
 export function activate(context: vscode.ExtensionContext) {
     outLog = vscode.window.createOutputChannel('CMG Help Logs');
@@ -104,16 +168,12 @@ export function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(cmgShowLogs);
 
-    const { rootPrefix, version, solver } = getExtensionConfig();
-    if (!rootPrefix || !version || !solver) {
+    const { rootPrefix, preferredVersion, availableSolvers } = getExtensionConfig();
+    if (!rootPrefix || !preferredVersion) {
         return new vscode.Hover('Configurações de rootPrefix, versão ou solver não estão definidas.');
     }
-    const result = loadKeywordData(rootPrefix, version, solver);
-    if (result) {
-        mergedKeywords = result.mergedKeywords;
-        availableVersions  = result.availableVersions;
-    }
-    else {
+    const keywordData = loadKeywordData();
+    if (!keywordData) {
         return new vscode.Hover('O arquivo keywordData.json não foi carregado corretamente.');
     }
 
@@ -141,7 +201,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             outLog.appendLine(`Keyword capturada no hover: ${keyword}`);
 
-            const keywordInfo = searchKeyword(keyword);
+            const keywordInfo = findKeyword(keywordData,keyword);
 
             if (!keywordInfo) {
               return new vscode.Hover(`Nenhuma documentação encontrada para a keyword: ${keyword}`);
@@ -151,7 +211,11 @@ export function activate(context: vscode.ExtensionContext) {
             hoverContent.appendMarkdown(`📖 **${keyword}**\n\n`);
             hoverContent.appendMarkdown(`${keywordInfo.description}\n\n`);
             outLog.appendLine(`Keyword passada para o comando cmghelp.openKeywordDocumentation: ${keyword}`);
-            hoverContent.appendMarkdown(`🔗 [Mais informações](command:cmghelp.openKeywordDocumentation?${encodeURIComponent(JSON.stringify(keyword))})`);
+            let clickString = '';
+            for (const solver of availableSolvers) {
+                clickString += `[${solver}](command:cmghelp.openKeywordDocumentation?${encodeURIComponent(JSON.stringify(solver+'|'+keyword))}) `;
+            }
+            hoverContent.appendMarkdown(`🔗 ${clickString}`);
 
             // Permitir que o link de "Mais informações" seja clicável
             hoverContent.isTrusted = true;
@@ -167,58 +231,67 @@ export function activate(context: vscode.ExtensionContext) {
      * apresenta no webview. O htm é preprocessado para permitir funcionar
      * corretamente no webview.
      */
-    vscode.commands.registerCommand('cmghelp.openKeywordDocumentation', (keyword: string) => {
-        const { rootPrefix, version, solver } = getExtensionConfig();
+    vscode.commands.registerCommand('cmghelp.openKeywordDocumentation', (searchElement: string) => {
+        const { rootPrefix, preferredVersion, availableSolvers } = getExtensionConfig();
         //outLog.appendLine('Config loaded:', rootPrefix, version, solver );
-        outLog.appendLine(`** Vou buscar pela keyword: ${keyword}`);
+        outLog.appendLine(`** Vou buscar pela keyword: ${searchElement}`);
 
-        if (!rootPrefix || !version || !solver) {
+        if (!rootPrefix || !preferredVersion) {
             vscode.window.showErrorMessage('Configurações de rootPrefix, versão ou solver não estão definidas.');
             return;
         }
 
-        if (!mergedKeywords) {
+        if (!cmgKeywords) {
             outLog.appendLine(`Não há uma estrutura de dados de keywords carregada em memória`);
             return;
         }
+        const diskVersions = findAvailableDiskVersions(rootPrefix);
+
+        if (!diskVersions) {
+            vscode.window.showErrorMessage(`Não há sequer uma versão da documentação instalada`);
+            outLog.appendLine(`Não há sequer uma versão da documentação instalada`);
+            return;
+        }
+        const bestDiskVersion = findBestVersion(diskVersions,preferredVersion);
+
         let htmlFilePath = '';
         let keywordInfo;
         let fileEnd='';
 
-        if (keyword.indexOf(".htm") === -1) {
+        if (searchElement.indexOf(".htm") === -1) {
+            if (searchElement.split('|').length !==2) {
+                outLog.appendLine(`O elemento a pesquisar não carrega o solver ${searchElement}`);
+                return;
+            }
+            let bestMemoryVersion = findBestVersion(Object.keys(cmgKeywords.versions),preferredVersion);
 
-            keywordInfo = searchKeyword(keyword);
+            keywordInfo = findKeyword(cmgKeywords, searchElement.split('|')[1], bestMemoryVersion,searchElement.split('|')[0] as "CMG" | "IMEX" | "STARS");
 
             if (!keywordInfo) {
-                vscode.window.showErrorMessage(`Keyword ${keyword} não encontrada em memória`);
+                vscode.window.showErrorMessage(`Keyword ${searchElement} não encontrada em memória`);
                 return;
             }
             fileEnd = keywordInfo.file;
-            htmlFilePath = path.join(rootPrefix, version, keywordInfo.file);
+            htmlFilePath = path.join(rootPrefix, bestDiskVersion, keywordInfo.file);
         }
         else {
-            console.log('Veio este htm: ',keyword);
-            fileEnd = keyword.split('#')[0];
-            htmlFilePath = path.join(rootPrefix,version,fileEnd);
-            keyword = path.basename(keyword).split('_')[0];
+            console.log('Veio este htm: ',searchElement);
+            fileEnd = searchElement.split('#')[0];
+            htmlFilePath = path.join(rootPrefix,bestDiskVersion,fileEnd);
+            searchElement = path.basename(searchElement).split('_')[0];
         }
 
         // Verifica se o arquivo existe
-        if (!fs.existsSync(htmlFilePath)) {
-            for (const version of availableVersions) {
-                htmlFilePath = path.join(rootPrefix, version, fileEnd);
-                if (fs.existsSync(htmlFilePath)) {
-                    outLog.appendLine(`Encontrados os manuais em ${htmlFilePath}`);
-                    break;
-                }
+        if (fs.existsSync(htmlFilePath)) {
+            outLog.appendLine(`Encontrados os manuais em ${htmlFilePath}`);
+        } else {
                 vscode.window.showErrorMessage(`A pasta de instalação do CMG (${htmlFilePath}) para os manuais não foi encontrada.`);
                 return;
-            }
         }
 
         const panel = vscode.window.createWebviewPanel(
             'keywordDocumentation',
-            `${keyword} Doc`,
+            `${searchElement}`,
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -231,7 +304,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Lê o arquivo HTML e ajusta os caminhos das imagens
         fs.readFile(htmlFilePath, 'utf8', (err, data) => {
-            outLog.appendLine(`Tentando abrir a keyword: ${keyword} no arquivo ${htmlFilePath}`);
+            outLog.appendLine(`Tentando abrir a keyword: ${searchElement} no arquivo ${htmlFilePath}`);
             if (err) {
                 vscode.window.showErrorMessage(`Erro ao carregar o arquivo HTML: ${err.message}`);
                 return;
