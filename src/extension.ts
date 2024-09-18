@@ -265,8 +265,8 @@ export function activate(context: vscode.ExtensionContext) {
         const diskVersions = findAvailableDiskVersions(rootPrefix);
 
         if (!diskVersions) {
-            vscode.window.showErrorMessage(`Não há sequer uma versão da documentação instalada`);
-            outLog.appendLine(`Não há sequer uma versão da documentação instalada`);
+            vscode.window.showErrorMessage(`Não há sequer uma versão da documentação instalada na pasta: ${path.resolve(rootPrefix)}`);
+            outLog.appendLine(`Não há sequer uma versão da documentação instalada na pasta: ${path.resolve(rootPrefix)}`);
             return;
         }
         const bestDiskVersion = findBestVersion(diskVersions,preferredVersion);
