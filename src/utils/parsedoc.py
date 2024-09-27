@@ -67,10 +67,15 @@ keyword_data = {
 for version in versions:
     keyword_data['versions'][version] = {'IMEX': {}, 'GEM': {}, 'STARS': {}}
 
+def get_last_4_folders(folder_path):
+    folders = folder_path.split(os.sep)
+    last_4_folders = folders[-4:]
+    return '\\'.join(last_4_folders)
+
 # Função para verificar e processar os arquivos .htm
 def process_htm_files(htm_dir, app_name):
     if os.path.exists(htm_dir):
-        print(f'Processando diretório: {htm_dir}')
+        print(f'Processando: {get_last_4_folders(htm_dir):<50}', end="\r")
 
         # Percorrer os arquivos .htm no diretório
         for file_name in os.listdir(htm_dir):
@@ -87,7 +92,7 @@ def process_htm_files(htm_dir, app_name):
                             'file': file_relative.replace("/", "\\")
                         }
     else:
-        print(f'ERRO: O diretório {htm_dir} não existe.')
+        print(f'ERRO - Diretório não existe: {get_last_4_folders(htm_dir):<50}')
 
 def extract_keywords_and_descriptions(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -110,7 +115,7 @@ def extract_keywords_and_descriptions(file_path):
     keywords = [kw.text.strip().lstrip('*') for kw in keyword_spans]  # Limpa espaços e o '*'
 
     # 3 - Encontra o <h3>PURPOSE:</h3> e todos os <p> subsequentes
-    purpose_header = h2.find_next('h3', text='PURPOSE:')
+    purpose_header = h2.find_next('h3', string='PURPOSE:')
     if not purpose_header:
         return keywords_and_descriptions  # Se não encontrar <h3>PURPOSE:</h3>, retorna vazio
 
