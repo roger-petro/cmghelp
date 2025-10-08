@@ -3,10 +3,10 @@ import * as fs from "fs";
 import * as path from "path";
 
 type CMGKeywords = {
-  prefix?: string; // prefix é opcional
+  prefix?: string;
   versions: {
     [version: string]: {
-      [solver in "CMG" | "IMEX" | "STARS"]: {
+      [solver in "GEM" | "IMEX" | "STARS"]: {
         [keyword: string]: {
           description: string;
           file: string;
@@ -24,7 +24,11 @@ function getExtensionConfig() {
   const config = vscode.workspace.getConfiguration("cmghelp");
   const rootPrefix = config.get<string>("rootPrefix");
   const preferredVersion = config.get<string>("preferredVersion");
-  const availableSolvers = config.get<string[]>("availableSolvers", ["GEM"]);
+  const availableSolvers = config.get<string[]>("availableSolvers", [
+    "GEM",
+    "IMEX",
+    "STARS",
+  ]);
   const keywordDataPath = config.get<string>("keywordDataPath");
   const fileExtensions: string[] = config.get("fileExtensions", [
     ".dat",
@@ -138,7 +142,7 @@ function findKeyword(
   cmgKeywords: CMGKeywords,
   searchTerm: string,
   version?: string,
-  solver?: "CMG" | "IMEX" | "STARS"
+  solver?: "GEM" | "IMEX" | "STARS"
 ): { description: string; file: string } | null {
   // Se a versão e o solver forem fornecidos, procurar apenas nesta seção
   if (version && solver) {
@@ -371,7 +375,7 @@ export function activate(context: vscode.ExtensionContext) {
           cmgKeywords,
           keywordName,
           bestMemoryVersion,
-          solverName as "CMG" | "IMEX" | "STARS"
+          solverName as "GEM" | "IMEX" | "STARS"
         );
 
         if (!keywordInfo) {
@@ -555,5 +559,229 @@ export function activate(context: vscode.ExtensionContext) {
         </script>
         `;
     return htmlContent + script;
+  }
+
+  /**
+   * Comando para mostrar versões disponíveis no CMGKeywords.json
+   */
+  const showVersionsCommand = vscode.commands.registerCommand(
+    "cmghelp.showAvailableVersions",
+    () => {
+      if (!cmgKeywords) {
+        vscode.window.showWarningMessage(
+          "CMG Help: O arquivo CMGKeywords.json não está carregado."
+        );
+        outLog.appendLine(
+          "Tentativa de mostrar versões sem keywords carregadas"
+        );
+        return;
+      }
+
+      const availableVersions = Object.keys(cmgKeywords.versions);
+
+      if (availableVersions.length === 0) {
+        vscode.window.showInformationMessage(
+          "CMG Help: Nenhuma versão encontrada no arquivo CMGKeywords.json"
+        );
+        return;
+      }
+
+      // Ordena as versões em ordem decrescente
+      const sortedVersions = sortVersions(availableVersions);
+
+      // Verifica quais versões também estão disponíveis no disco
+      const { rootPrefix } = getExtensionConfig();
+      const diskVersions = rootPrefix
+        ? findAvailableDiskVersions(rootPrefix)
+        : [];
+
+      // Cria mensagem detalhada
+      let message = "**Versões disponíveis no CMGKeywords.json:**\n\n";
+
+      sortedVersions.forEach((version) => {
+        const isOnDisk = diskVersions.includes(version);
+        const diskIndicator = isOnDisk ? "✅" : "⚠️";
+        const diskStatus = isOnDisk
+          ? "Disponível no disco"
+          : "Não encontrada no disco";
+
+        // Conta quantas keywords existem nesta versão
+        let keywordCount = 0;
+        const solvers = cmgKeywords!.versions[version];
+        for (const solver of Object.keys(solvers) as Array<
+          keyof typeof solvers
+        >) {
+          keywordCount += Object.keys(solvers[solver]).length;
+        }
+
+        message += `${diskIndicator} **${version}** - ${keywordCount} keywords (${diskStatus})\n`;
+      });
+
+      message += `\n---\n`;
+      message += `**Total:** ${sortedVersions.length} versão(ões)\n`;
+      message += `**Versão preferida configurada:** ${
+        getExtensionConfig().preferredVersion
+      }\n`;
+
+      if (diskVersions.length > 0) {
+        message += `**Versões no disco:** ${diskVersions.length}\n`;
+      } else if (rootPrefix) {
+        message += `**⚠️ Nenhuma versão encontrada no disco em:** ${rootPrefix}\n`;
+      }
+
+      // Cria um webview para mostrar as informações
+      const panel = vscode.window.createWebviewPanel(
+        "cmgVersions",
+        "CMG - Versões Disponíveis",
+        vscode.ViewColumn.One,
+        {}
+      );
+
+      panel.webview.html = getVersionsWebviewContent(
+        message,
+        sortedVersions,
+        diskVersions
+      );
+
+      outLog.appendLine(
+        `Mostrando ${sortedVersions.length} versões disponíveis`
+      );
+    }
+  );
+
+  context.subscriptions.push(showVersionsCommand);
+
+  /**
+   * Gera o conteúdo HTML para o webview de versões
+   */
+  function getVersionsWebviewContent(
+    message: string,
+    memoryVersions: string[],
+    diskVersions: string[]
+  ): string {
+    const { rootPrefix, preferredVersion } = getExtensionConfig();
+    const isDarkTheme =
+      vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark;
+
+    let detailsHtml = "";
+
+    memoryVersions.forEach((version) => {
+      const isOnDisk = diskVersions.includes(version);
+      const isPreferred = version === preferredVersion;
+      const status = isOnDisk ? "✅ Disponível" : "⚠️ Não encontrada";
+      const preferredBadge = isPreferred
+        ? '<span style="background: #0066cc; color: white; padding: 2px 8px; border-radius: 3px; margin-left: 10px; font-size: 0.9em;">PREFERIDA</span>'
+        : "";
+
+      // Conta keywords por solver
+      const solvers = cmgKeywords!.versions[version];
+      const gemCount = Object.keys(solvers.GEM || {}).length;
+      const imexCount = Object.keys(solvers.IMEX || {}).length;
+      const starsCount = Object.keys(solvers.STARS || {}).length;
+      const totalCount = gemCount + imexCount + starsCount;
+
+      detailsHtml += `
+        <div style="border: 1px solid ${
+          isDarkTheme ? "#444" : "#ddd"
+        }; padding: 15px; margin: 10px 0; border-radius: 5px; background: ${
+        isDarkTheme ? "#2d2d2d" : "#f9f9f9"
+      };">
+          <h3 style="margin-top: 0;">
+            ${version} ${preferredBadge}
+          </h3>
+          <p><strong>Status no disco:</strong> ${status}</p>
+          <p><strong>Total de keywords:</strong> ${totalCount}</p>
+          <ul style="margin: 5px 0;">
+            <li>GEM: ${gemCount} keywords</li>
+            <li>IMEX: ${imexCount} keywords</li>
+            <li>STARS: ${starsCount} keywords</li>
+          </ul>
+        </div>
+      `;
+    });
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body {
+            font-family: var(--vscode-font-family);
+            padding: 20px;
+            color: ${isDarkTheme ? "#d4d4d4" : "#000000"};
+            background-color: ${isDarkTheme ? "#1e1e1e" : "#ffffff"};
+          }
+          h1 {
+            color: ${isDarkTheme ? "#4ec9b0" : "#0066cc"};
+          }
+          h2 {
+            color: ${isDarkTheme ? "#569cd6" : "#0066cc"};
+            border-bottom: 2px solid ${isDarkTheme ? "#569cd6" : "#0066cc"};
+            padding-bottom: 5px;
+          }
+          .info-box {
+            background: ${isDarkTheme ? "#264f78" : "#e3f2fd"};
+            border-left: 4px solid ${isDarkTheme ? "#569cd6" : "#0066cc"};
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 3px;
+          }
+          .warning-box {
+            background: ${isDarkTheme ? "#5a3e1a" : "#fff3cd"};
+            border-left: 4px solid ${isDarkTheme ? "#d7ba7d" : "#856404"};
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 3px;
+          }
+          code {
+            background: ${isDarkTheme ? "#3c3c3c" : "#f5f5f5"};
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>📚 CMG Help - Versões Disponíveis</h1>
+
+        <div class="info-box">
+          <p><strong>📁 Diretório de manuais:</strong> <code>${
+            rootPrefix || "Não configurado"
+          }</code></p>
+          <p><strong>⭐ Versão preferida:</strong> <code>${preferredVersion}</code></p>
+          <p><strong>💾 Versões no CMGKeywords.json:</strong> ${
+            memoryVersions.length
+          }</p>
+          <p><strong>💿 Versões no disco:</strong> ${diskVersions.length}</p>
+        </div>
+
+        ${
+          diskVersions.length === 0 && rootPrefix
+            ? `
+          <div class="warning-box">
+            <p><strong>⚠️ Atenção:</strong> Nenhuma versão da documentação foi encontrada no disco.</p>
+            <p>Verifique se o caminho <code>${rootPrefix}</code> está correto e contém as pastas de versões (ex: 2023.10).</p>
+          </div>
+        `
+            : ""
+        }
+
+        <h2>📋 Detalhes das Versões</h2>
+        ${detailsHtml}
+
+        <div style="margin-top: 30px; padding: 15px; border-top: 1px solid ${
+          isDarkTheme ? "#444" : "#ddd"
+        };">
+          <p style="font-size: 0.9em; color: ${isDarkTheme ? "#888" : "#666"};">
+            <strong>Legenda:</strong><br>
+            ✅ Versão disponível no disco e no arquivo JSON<br>
+            ⚠️ Versão disponível apenas no arquivo JSON (documentação não encontrada no disco)
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
   }
 }

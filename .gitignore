@@ -5,3 +5,10 @@ node_modules
 *.vsix
 **/keywordData.json
 **/CMGKeywords.json
+.venv
+venv/
+__pycache__/
+*.py[cod]
+pip-wheel-metadata/
+pip-selfcheck.json
+*.log
