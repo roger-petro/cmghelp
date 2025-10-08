@@ -143,16 +143,36 @@ function findKeyword(
   searchTerm: string,
   version?: string,
   solver?: "GEM" | "IMEX" | "STARS"
-): { description: string; file: string } | null {
-  // Se a versão e o solver forem fornecidos, procurar apenas nesta seção
+): { description: string; file: string; foundVersion?: string } | null {
+  // Se a versão e o solver forem fornecidos, procurar nesta seção primeiro
   if (version && solver) {
     const solvers = cmgKeywords.versions[version];
     if (solvers) {
       const keywords = solvers[solver];
       if (keywords && keywords[searchTerm]) {
-        return keywords[searchTerm];
+        return { ...keywords[searchTerm], foundVersion: version };
       }
     }
+
+    // Se não encontrou, tenta nas versões anteriores com o mesmo solver
+    const allVersions = Object.keys(cmgKeywords.versions);
+    const sortedVersions = sortVersions(allVersions);
+
+    for (const fallbackVersion of sortedVersions) {
+      if (fallbackVersion === version) continue; // Pula a versão já tentada
+
+      const fallbackSolvers = cmgKeywords.versions[fallbackVersion];
+      if (fallbackSolvers) {
+        const fallbackKeywords = fallbackSolvers[solver];
+        if (fallbackKeywords && fallbackKeywords[searchTerm]) {
+          return {
+            ...fallbackKeywords[searchTerm],
+            foundVersion: fallbackVersion,
+          };
+        }
+      }
+    }
+
     return null;
   }
 
@@ -165,27 +185,53 @@ function findKeyword(
       >) {
         const keywords = solvers[solverKey];
         if (keywords[searchTerm]) {
-          return keywords[searchTerm];
+          return { ...keywords[searchTerm], foundVersion: version };
         }
       }
     }
+
+    // Se não encontrou, tenta nas versões anteriores em todos os solvers
+    const allVersions = Object.keys(cmgKeywords.versions);
+    const sortedVersions = sortVersions(allVersions);
+
+    for (const fallbackVersion of sortedVersions) {
+      if (fallbackVersion === version) continue;
+
+      const fallbackSolvers = cmgKeywords.versions[fallbackVersion];
+      if (fallbackSolvers) {
+        for (const solverKey of Object.keys(fallbackSolvers) as Array<
+          keyof typeof fallbackSolvers
+        >) {
+          const fallbackKeywords = fallbackSolvers[solverKey];
+          if (fallbackKeywords[searchTerm]) {
+            return {
+              ...fallbackKeywords[searchTerm],
+              foundVersion: fallbackVersion,
+            };
+          }
+        }
+      }
+    }
+
     return null;
   }
 
   // Caso nem a versão nem o solver sejam fornecidos, procurar em todas as versões e solvers
-  for (const versionKey in cmgKeywords.versions) {
+  const allVersions = Object.keys(cmgKeywords.versions);
+  const sortedVersions = sortVersions(allVersions);
+
+  for (const versionKey of sortedVersions) {
     const solvers = cmgKeywords.versions[versionKey];
     for (const solverKey of Object.keys(solvers) as Array<
       keyof typeof solvers
     >) {
       const keywords = solvers[solverKey];
       if (keywords[searchTerm]) {
-        return keywords[searchTerm];
+        return { ...keywords[searchTerm], foundVersion: versionKey };
       }
     }
   }
 
-  // Se não encontrar a keyword, retorna null
   return null;
 }
 
@@ -285,12 +331,22 @@ export function activate(context: vscode.ExtensionContext) {
         const keywordInfo = findKeyword(cmgKeywords, keyword);
 
         if (!keywordInfo) {
-          return null; // Não mostra hover se não encontrar
+          return null;
         }
 
         const hoverContent = new vscode.MarkdownString();
         hoverContent.appendMarkdown(`📖 **${keyword}**\n\n`);
         hoverContent.appendMarkdown(`${keywordInfo.description}\n\n`);
+
+        // Mostra um aviso se a keyword foi encontrada em uma versão diferente
+        if (
+          keywordInfo.foundVersion &&
+          keywordInfo.foundVersion !== preferredVersion
+        ) {
+          hoverContent.appendMarkdown(
+            `ℹ️ _Documentação encontrada na versão ${keywordInfo.foundVersion}_\n\n`
+          );
+        }
 
         let clickString = "";
         for (const solver of availableSolvers) {
@@ -380,9 +436,26 @@ export function activate(context: vscode.ExtensionContext) {
 
         if (!keywordInfo) {
           vscode.window.showErrorMessage(
-            `CMG Help: Keyword ${keywordName} não encontrada`
+            `CMG Help: Keyword ${keywordName} não encontrada em nenhuma versão`
+          );
+          outLog.appendLine(
+            `Keyword ${keywordName} não encontrada em nenhuma versão disponível`
           );
           return;
+        }
+
+        // Log se a keyword foi encontrada em uma versão diferente
+        if (
+          keywordInfo.foundVersion &&
+          keywordInfo.foundVersion !== bestMemoryVersion
+        ) {
+          outLog.appendLine(
+            `Keyword ${keywordName} não encontrada na versão ${bestMemoryVersion}, ` +
+              `usando documentação da versão ${keywordInfo.foundVersion}`
+          );
+          vscode.window.showInformationMessage(
+            `CMG Help: Documentação da keyword ${keywordName} encontrada na versão ${keywordInfo.foundVersion}`
+          );
         }
 
         fileEnd = keywordInfo.file;
@@ -532,11 +605,11 @@ export function activate(context: vscode.ExtensionContext) {
                     if (target && target.href.startsWith('command:cmghelp.openKeywordDocumentation')) {
                         event.preventDefault();
                         const commandUri = target.href.split('command:')[1];
-                        vscode.postMessage({ 
-                            command: commandUri, 
+                        vscode.postMessage({
+                            command: commandUri,
                             originalPath: "${encodeURIComponent(
                               path.dirname(fileEnd)
-                            )}" 
+                            )}"
                         });
                     }
                 });
@@ -552,6 +625,16 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                     a {
                         color: \${isDark ? '#569cd6' : '#0066cc'} !important;
+                    }
+                    h1, h2, h3, h4, h5, h6 {
+                        color: \${isDark ? '#b0b0b0' : '#606060'} !important;
+                    }
+                    p, div, span, td, th {
+                        color: inherit !important;
+                    }
+                    /* Força cor em elementos com estilos inline de cor preta */
+                    [style*="color: black"], [style*="color:#000000"], [style*="color: #000"] {
+                        color: \${isDark ? '#d4d4d4' : '#333333'} !important;
                     }
                 \`;
                 document.head.appendChild(style);
