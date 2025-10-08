@@ -16,7 +16,7 @@ type CMGKeywords = {
   };
 };
 
-let cmgKeywords: CMGKeywords;
+let cmgKeywords: CMGKeywords | null = null;
 
 let outLog: vscode.OutputChannel;
 
@@ -47,34 +47,32 @@ function getExtensionConfig() {
 function loadKeywordData(
   context: vscode.ExtensionContext,
   outLog: vscode.OutputChannel
-) {
+): CMGKeywords | null {
   let { keywordDataPath } = getExtensionConfig();
 
-  // Se o caminho não foi definido, usa o diretório home do usuário como padrão
   if (!keywordDataPath) {
-    // const homeDir = require('os').homedir();  // Diretório home do usuário
-    // keywordDataPath = path.join(homeDir, 'CMGKeywords.json');
     keywordDataPath = path.join(context.extensionPath, "CMGKeywords.json");
   }
-  // Carregando o arquivo JSON
 
   if (fs.existsSync(keywordDataPath)) {
     try {
       const rawData = fs.readFileSync(keywordDataPath, "utf-8");
-      cmgKeywords = JSON.parse(rawData) as CMGKeywords;
+      const data = JSON.parse(rawData) as CMGKeywords;
       outLog.appendLine(
         `CMGKeywords.json carregado da origem ${keywordDataPath}`
       );
-      return cmgKeywords;
+      return data;
     } catch (error: any) {
       vscode.window.showErrorMessage(
         "Erro ao carregar CMGKeywords.json: " + error.message
       );
+      outLog.appendLine(`Erro ao carregar CMGKeywords.json: ${error.message}`);
     }
   } else {
     vscode.window.showErrorMessage("CMGKeywords.json não encontrado.");
+    outLog.appendLine(`CMGKeywords.json não encontrado em ${keywordDataPath}`);
   }
-  return cmgKeywords;
+  return null;
 }
 
 function sortVersions(versions: string[]): string[] {
@@ -116,23 +114,24 @@ function findBestVersion(
  * @param rootPrefix
  * @returns
  */
-function findAvailableDiskVersions(rootPrefix: string): string[] | null {
-  // Verifica se o diretório existe
+function findAvailableDiskVersions(rootPrefix: string): string[] {
   if (!fs.existsSync(rootPrefix)) {
-    return null; // Se o diretório não existir, retorna null
+    return [];
   }
 
-  // Regex para verificar se o nome da pasta tem o formato NNNN.NN
   const versionRegex = /^[0-9]{4}\.[0-9]{2}$/;
 
-  // Lê o conteúdo do diretório
-  const folders = fs
-    .readdirSync(rootPrefix, { withFileTypes: true })
-    .filter((dirent) => dirent.isDirectory()) // Filtra apenas diretórios
-    .map((dirent) => dirent.name) // Obtém os nomes dos diretórios
-    .filter((name) => versionRegex.test(name)); // Filtra os que correspondem ao formato NNNN.NN
+  try {
+    const folders = fs
+      .readdirSync(rootPrefix, { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => dirent.name)
+      .filter((name) => versionRegex.test(name));
 
-  return folders;
+    return folders;
+  } catch (error: any) {
+    return [];
+  }
 }
 
 function findKeyword(
@@ -191,7 +190,7 @@ export function activate(context: vscode.ExtensionContext) {
   outLog.appendLine("CMG Help extension has been activated");
 
   let cmgShowLogs = vscode.commands.registerCommand("cmghelp.showLogs", () => {
-    outLog.show(); // Exibe o canal de saída no painel Output
+    outLog.show();
     outLog.appendLine("Log information: Command executed");
   });
   context.subscriptions.push(cmgShowLogs);
@@ -200,26 +199,33 @@ export function activate(context: vscode.ExtensionContext) {
     getExtensionConfig();
 
   vscode.workspace.onDidChangeConfiguration((event) => {
-    if (event.affectsConfiguration("cmghelp.availableSolvers")) {
-      // Atualiza a configuração se o availableSolvers foi alterado
-      outLog.appendLine(
-        "availableSolvers foi alterado, recarregando configurações."
-      );
+    if (event.affectsConfiguration("cmghelp")) {
+      outLog.appendLine("Configurações alteradas, recarregando.");
       ({ rootPrefix, preferredVersion, availableSolvers, fileExtensions } =
         getExtensionConfig());
+
+      // Recarrega keywords se o caminho mudou
+      if (event.affectsConfiguration("cmghelp.keywordDataPath")) {
+        cmgKeywords = loadKeywordData(context, outLog);
+      }
     }
   });
 
+  // Carrega os dados de keywords na ativação
+  cmgKeywords = loadKeywordData(context, outLog);
+
   if (!rootPrefix || !preferredVersion) {
-    return new vscode.Hover(
-      "Configurações de rootPrefix, versão ou solver não estão definidas."
+    vscode.window.showWarningMessage(
+      "CMG Help: Configurações de rootPrefix ou versão não estão definidas."
     );
+    outLog.appendLine("Configurações de rootPrefix ou versão ausentes.");
   }
-  const keywordData = loadKeywordData(context, outLog);
-  if (!keywordData) {
-    return new vscode.Hover(
-      "O arquivo keywordData.json não foi carregado corretamente."
+
+  if (!cmgKeywords) {
+    vscode.window.showWarningMessage(
+      "CMG Help: O arquivo CMGKeywords.json não foi carregado corretamente."
     );
+    outLog.appendLine("CMGKeywords.json não carregado.");
   }
 
   function isFileSupported(document: vscode.TextDocument): boolean {
@@ -228,7 +234,6 @@ export function activate(context: vscode.ExtensionContext) {
     return fileExtensions.some((ext) => fileName.endsWith(ext.toLowerCase()));
   }
 
-  // HoverProvider para exibir a descrição sintética ao passar o mouse sobre uma keyword
   const hoverProvider = vscode.languages.registerHoverProvider(
     { scheme: "file" },
     {
@@ -236,48 +241,61 @@ export function activate(context: vscode.ExtensionContext) {
         const isDisable = vscode.workspace
           .getConfiguration()
           .get("cmghelp.disable", false);
+
         if (isDisable || !isFileSupported(document)) {
           return null;
         }
-        const range = document.getWordRangeAtPosition(position);
-        const lineText = document.lineAt(position).text.trim(); // Captura a linha completa onde o cursor está
 
-        // Verificar se a linha começa com a keyword no formato correto (pode ter espaços ou * antes)
-        const keywordPattern = /^[\s\*]*([A-Z-]{2,}[A-Z0-9-]*)/;
+        if (!cmgKeywords) {
+          return null;
+        }
+
+        const range = document.getWordRangeAtPosition(position);
+        if (!range) {
+          return null;
+        }
+
+        const lineText = document.lineAt(position).text.trim();
+
+        // Regex mais rigoroso: keyword deve estar no início da linha (após espaços/asteriscos)
+        const keywordPattern = /^[\s\*]*([A-Z][A-Z0-9-]*[A-Z0-9])\b/;
         const match = lineText.match(keywordPattern);
 
         if (!match) {
-          // Se a keyword não corresponder ao padrão ou não estiver na posição correta, não faça nada
-          return;
+          return null;
         }
 
-        const keyword = match[1].toUpperCase().trim(); // Extrai a keyword do match
+        const keyword = match[1].toUpperCase().trim();
+
+        // Verifica se o cursor está sobre a keyword
+        const keywordStartIndex = lineText.indexOf(match[0]);
+        const keywordEndIndex = keywordStartIndex + match[0].length;
+        const cursorIndex = position.character;
+
+        if (cursorIndex < keywordStartIndex || cursorIndex > keywordEndIndex) {
+          return null;
+        }
 
         outLog.appendLine(`Keyword capturada no hover: ${keyword}`);
 
-        const keywordInfo = findKeyword(keywordData, keyword);
+        const keywordInfo = findKeyword(cmgKeywords, keyword);
 
         if (!keywordInfo) {
-          return new vscode.Hover(
-            `Nenhuma documentação encontrada para a keyword: ${keyword}`
-          );
+          return null; // Não mostra hover se não encontrar
         }
 
         const hoverContent = new vscode.MarkdownString();
         hoverContent.appendMarkdown(`📖 **${keyword}**\n\n`);
         hoverContent.appendMarkdown(`${keywordInfo.description}\n\n`);
-        outLog.appendLine(
-          `Keyword passada para o comando cmghelp.openKeywordDocumentation: ${keyword}`
-        );
+
         let clickString = "";
         for (const solver of availableSolvers) {
-          clickString += `[${solver}](command:cmghelp.openKeywordDocumentation?${encodeURIComponent(
+          const args = encodeURIComponent(
             JSON.stringify(solver + "|" + keyword)
-          )}) `;
+          );
+          clickString += `[${solver}](command:cmghelp.openKeywordDocumentation?${args}) `;
         }
         hoverContent.appendMarkdown(`🔗 ${clickString}`);
-
-        // Permitir que o link de "Mais informações" seja clicável
         hoverContent.isTrusted = true;
 
         return new vscode.Hover(hoverContent);
@@ -287,96 +305,100 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(hoverProvider);
 
-  /**
-   * Carrega o arquivo htm da documentação, para a keyword escolhida e
-   * apresenta no webview. O htm é preprocessado para permitir funcionar
-   * corretamente no webview.
-   */
-  vscode.commands.registerCommand(
+  const openDocCommand = vscode.commands.registerCommand(
     "cmghelp.openKeywordDocumentation",
     (searchElement: string) => {
-      const { rootPrefix, preferredVersion, availableSolvers } =
-        getExtensionConfig();
-      //outLog.appendLine('Config loaded:', rootPrefix, version, solver );
+      if (!searchElement) {
+        outLog.appendLine("Comando chamado sem searchElement");
+        return;
+      }
+
+      const { rootPrefix, preferredVersion } = getExtensionConfig();
+
       outLog.appendLine(`** Vou buscar pela keyword: ${searchElement}`);
 
       if (!rootPrefix || !preferredVersion) {
         vscode.window.showErrorMessage(
-          "Configurações de rootPrefix, versão ou solver não estão definidas."
+          "CMG Help: Configurações de rootPrefix ou versão não estão definidas."
         );
         return;
       }
 
       if (!cmgKeywords) {
-        outLog.appendLine(
-          `Não há uma estrutura de dados de keywords carregada em memória`
+        vscode.window.showErrorMessage(
+          "CMG Help: Estrutura de keywords não carregada."
         );
+        outLog.appendLine("Estrutura de keywords não carregada em memória");
         return;
       }
+
       const diskVersions = findAvailableDiskVersions(rootPrefix);
 
-      if (!diskVersions) {
+      if (diskVersions.length === 0) {
         vscode.window.showErrorMessage(
-          `Não há sequer uma versão da documentação instalada na pasta: ${path.resolve(
+          `CMG Help: Nenhuma versão da documentação encontrada em: ${path.resolve(
             rootPrefix
           )}`
         );
         outLog.appendLine(
-          `Não há sequer uma versão da documentação instalada na pasta: ${path.resolve(
-            rootPrefix
-          )}`
+          `Nenhuma versão da documentação em: ${path.resolve(rootPrefix)}`
         );
         return;
       }
+
       const bestDiskVersion = findBestVersion(diskVersions, preferredVersion);
 
       let htmlFilePath = "";
       let keywordInfo;
       let fileEnd = "";
 
-      if (searchElement.indexOf(".htm") === -1) {
-        if (searchElement.split("|").length !== 2) {
+      if (!searchElement.includes(".htm")) {
+        const parts = searchElement.split("|");
+        if (parts.length !== 2) {
           outLog.appendLine(
-            `O elemento a pesquisar não carrega o solver ${searchElement}`
+            `Formato inválido do elemento de pesquisa: ${searchElement}`
           );
           return;
         }
-        let bestMemoryVersion = findBestVersion(
+
+        const [solverName, keywordName] = parts;
+        const bestMemoryVersion = findBestVersion(
           Object.keys(cmgKeywords.versions),
           preferredVersion
         );
 
         keywordInfo = findKeyword(
           cmgKeywords,
-          searchElement.split("|")[1],
+          keywordName,
           bestMemoryVersion,
-          searchElement.split("|")[0] as "CMG" | "IMEX" | "STARS"
+          solverName as "CMG" | "IMEX" | "STARS"
         );
 
         if (!keywordInfo) {
           vscode.window.showErrorMessage(
-            `Keyword ${searchElement} não encontrada em memória`
+            `CMG Help: Keyword ${keywordName} não encontrada`
           );
           return;
         }
+
         fileEnd = keywordInfo.file;
         htmlFilePath = path.join(rootPrefix, bestDiskVersion, keywordInfo.file);
       } else {
-        console.log("Veio este htm: ", searchElement);
+        outLog.appendLine(`Carregando arquivo HTM: ${searchElement}`);
         fileEnd = searchElement.split("#")[0];
         htmlFilePath = path.join(rootPrefix, bestDiskVersion, fileEnd);
         searchElement = path.basename(searchElement).split("_")[0];
       }
 
-      // Verifica se o arquivo existe
-      if (fs.existsSync(htmlFilePath)) {
-        outLog.appendLine(`Encontrados os manuais em ${htmlFilePath}`);
-      } else {
+      if (!fs.existsSync(htmlFilePath)) {
         vscode.window.showErrorMessage(
-          `A pasta de instalação do CMG (${htmlFilePath}) para os manuais não foi encontrada.`
+          `CMG Help: Arquivo não encontrado: ${htmlFilePath}`
         );
+        outLog.appendLine(`Arquivo não encontrado: ${htmlFilePath}`);
         return;
       }
+
+      outLog.appendLine(`Abrindo documentação: ${htmlFilePath}`);
 
       const panel = vscode.window.createWebviewPanel(
         "keywordDocumentation",
@@ -391,15 +413,12 @@ export function activate(context: vscode.ExtensionContext) {
         }
       );
 
-      // Lê o arquivo HTML e ajusta os caminhos das imagens
       fs.readFile(htmlFilePath, "utf8", (err, data) => {
-        outLog.appendLine(
-          `Tentando abrir a keyword: ${searchElement} no arquivo ${htmlFilePath}`
-        );
         if (err) {
           vscode.window.showErrorMessage(
-            `Erro ao carregar o arquivo HTML: ${err.message}`
+            `CMG Help: Erro ao carregar HTML: ${err.message}`
           );
+          outLog.appendLine(`Erro ao carregar HTML: ${err.message}`);
           return;
         }
 
@@ -410,67 +429,32 @@ export function activate(context: vscode.ExtensionContext) {
           panel
         );
         panel.webview.html = adjustedHtmlContent;
-        panel.webview.onDidReceiveMessage(async (message: any) => {
-          outLog.appendLine(
-            "Recebido este evento: " + decodeURIComponent(message.command)
-          );
-          outLog.appendLine(
-            "Recebido este evento: " + decodeURIComponent(message.originalPath)
-          );
-          const uri = path.join(
-            decodeURIComponent(message.originalPath),
-            decodeURIComponent(message.command)
-              .split("?")[1]
-              .replaceAll('"', "")
-          );
-          vscode.commands.executeCommand(
-            "cmghelp.openKeywordDocumentation",
-            uri
-          );
+
+        panel.webview.onDidReceiveMessage((message: any) => {
+          try {
+            const decodedCommand = decodeURIComponent(message.command);
+            const decodedPath = decodeURIComponent(message.originalPath);
+
+            outLog.appendLine(`Evento recebido: ${decodedCommand}`);
+
+            const uri = path.join(
+              decodedPath,
+              decodedCommand.split("?")[1]?.replaceAll('"', "") || ""
+            );
+
+            vscode.commands.executeCommand(
+              "cmghelp.openKeywordDocumentation",
+              uri
+            );
+          } catch (error: any) {
+            outLog.appendLine(`Erro ao processar mensagem: ${error.message}`);
+          }
         });
       });
     }
   );
 
-  /**
-   * Comando para habilitar a extensão
-   */
-  vscode.commands.registerCommand("cmghelp.enable", () => {
-    // Atualizar a configuração para definir cmghelp.disable como false
-    vscode.workspace
-      .getConfiguration()
-      .update("cmghelp.disable", false, vscode.ConfigurationTarget.Global)
-      .then(
-        () => {
-          vscode.window.showInformationMessage("CMG Help has been enabled.");
-          outLog.appendLine("CMG Help has been enabled.");
-        },
-        (err) => {
-          vscode.window.showErrorMessage(`Failed to enable CMG Help: ${err}`);
-          outLog.appendLine(`Failed to enable CMG Help: ${err}`);
-        }
-      );
-  });
-
-  /**
-   * Comando para desabilitar a extensão
-   */
-  vscode.commands.registerCommand("cmghelp.disable", () => {
-    // Atualizar a configuração para definir cmghelp.disable como true
-    vscode.workspace
-      .getConfiguration()
-      .update("cmghelp.disable", true, vscode.ConfigurationTarget.Global)
-      .then(
-        () => {
-          vscode.window.showInformationMessage("CMG Help has been disabled.");
-          outLog.appendLine("CMG Help has been disabled.");
-        },
-        (err) => {
-          vscode.window.showErrorMessage(`Failed to disable CMG Help: ${err}`);
-          outLog.appendLine(`Failed to disable CMG Help: ${err}`);
-        }
-      );
-  });
+  context.subscriptions.push(openDocCommand);
 
   /**
    * Altera os links do htm carregado para funcionar com o esquema asWebView do VSCODE
@@ -481,10 +465,10 @@ export function activate(context: vscode.ExtensionContext) {
     fileEnd: string,
     panel: vscode.WebviewPanel
   ): string {
-    // Ajustar referências de CSS
     const isDarkTheme =
       vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark;
 
+    // Ajustar referências de CSS
     htmlContent = htmlContent.replace(
       /<link.*?href="(.*?)".*?>/g,
       (match, cssPath) => {
@@ -517,13 +501,15 @@ export function activate(context: vscode.ExtensionContext) {
       }
     );
 
-    //Ajustar links internos para abrir no WebView
+    // Ajustar links internos
     htmlContent = htmlContent.replace(
       /<a.*?href="(.*?)".*?>/g,
       (match, linkPath) => {
-        const keyword = path
-          .basename(linkPath, path.extname(linkPath))
-          .toUpperCase();
+        // Ignora links externos e âncoras
+        if (linkPath.startsWith("http") || linkPath.startsWith("#")) {
+          return match;
+        }
+
         return match.replace(
           linkPath,
           `command:cmghelp.openKeywordDocumentation?${encodeURIComponent(
@@ -533,28 +519,27 @@ export function activate(context: vscode.ExtensionContext) {
       }
     );
 
-    // Adicionar script para capturar cliques em links
     const script = `
         <script>
             (function() {
-                const vscode = window.acquireVsCodeApi(); // Chama apenas uma vez
+                const vscode = window.acquireVsCodeApi();
                 document.addEventListener('click', function(event) {
                     const target = event.target.closest('a');
                     if (target && target.href.startsWith('command:cmghelp.openKeywordDocumentation')) {
                         event.preventDefault();
                         const commandUri = target.href.split('command:')[1];
-                        vscode.postMessage({ command: commandUri, originalPath: "${encodeURIComponent(
-                          path.dirname(fileEnd)
-                        )}" }); // Envia mensagens usando a instância armazenada
-                        //console.log('PostMessage enviado com ', commandUri)
+                        vscode.postMessage({ 
+                            command: commandUri, 
+                            originalPath: "${encodeURIComponent(
+                              path.dirname(fileEnd)
+                            )}" 
+                        });
                     }
                 });
             })();
 
             (function() {
                 const isDark = ${isDarkTheme};
-
-                // Cria uma tag <style> e injeta os estilos
                 const style = document.createElement('style');
                 style.textContent = \`
                     body {
@@ -564,7 +549,6 @@ export function activate(context: vscode.ExtensionContext) {
                     a {
                         color: \${isDark ? '#569cd6' : '#0066cc'} !important;
                     }
-                    /* Outros estilos */
                 \`;
                 document.head.appendChild(style);
             })();
