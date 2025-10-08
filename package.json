@@ -13,16 +13,14 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/roger-petro/cmghelp.git"
+    "url": "https://github.com/devopsrc1/cmghelp.git"
   },
   "icon": "images/icon.png",
   "activationEvents": [
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
-
   "contributes": {
-
     "commands": [
       {
         "command": "cmghelp.openKeywordUrl",
@@ -44,7 +42,7 @@
         "category": "CMG"
       }
     ],
-    "menus" : {
+    "menus": {
       "commandPalette": [
         {
           "command": "cmghelp.showLogs"
@@ -55,38 +53,46 @@
       "type": "object",
       "title": "CMG Help",
       "properties": {
-          "cmghelp.rootPrefix": {
-              "type": "string",
-              "default": "C:\\Program Files\\CMG\\Manuals",
-              "description": "Root prefix directory where the manuals are stored"
-          },
-          "cmghelp.preferredVersion": {
-              "type": "string",
-              "default": "2023.10",
-              "pattern": "^[0-9]{4}\\.[0-9]{2}$",
-              "description": "Preferred version of the manual for reference"
-          },
-          "cmghelp.availableSolvers": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": ["IMEX", "GEM", "STARS"],
-                "description": "Select solvers to be available on description link"
-              },
-              "default": [ "IMEX", "GEM", "STARS"],
-              "uniqueItems": true,
-              "description": "Select at least one solver for reference. Solvers that can be used in the description link"
-            },
-          "cmghelp.keywordDataPath": {
+        "cmghelp.rootPrefix": {
+          "type": "string",
+          "default": "C:\\Program Files\\CMG\\Manuals",
+          "description": "Root prefix directory where the manuals are stored"
+        },
+        "cmghelp.preferredVersion": {
+          "type": "string",
+          "default": "2023.10",
+          "pattern": "^[0-9]{4}\\.[0-9]{2}$",
+          "description": "Preferred version of the manual for reference"
+        },
+        "cmghelp.availableSolvers": {
+          "type": "array",
+          "items": {
             "type": "string",
-            "default": "",
-            "description": "Path to the CMGKeywords.json file. Leave it empty to use the embedded file"
+            "enum": [
+              "IMEX",
+              "GEM",
+              "STARS"
+            ],
+            "description": "Select solvers to be available on description link"
           },
-          "cmghelp.disable": {
-            "type": "boolean",
-            "default": false,
-            "description": "Disable Plugin Actions"
-          }
+          "default": [
+            "IMEX",
+            "GEM",
+            "STARS"
+          ],
+          "uniqueItems": true,
+          "description": "Select at least one solver for reference. Solvers that can be used in the description link"
+        },
+        "cmghelp.keywordDataPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the CMGKeywords.json file. Leave it empty to use the embedded file"
+        },
+        "cmghelp.disable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable Plugin Actions"
+        }
       }
     }
   },
@@ -97,7 +103,7 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test",
-    "package" : "vsce package"
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/vscode": "^1.54.0",
