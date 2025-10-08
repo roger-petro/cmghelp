@@ -92,6 +92,20 @@
           "type": "boolean",
           "default": false,
           "description": "Disable Plugin Actions"
+        },
+        "cmghelp.fileExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".dat",
+            ".inc",
+            ".cmg",
+            ".gem",
+            ".imex"
+          ],
+          "description": "File extensions that the CMG Help plugin should activate for (must start with a dot)"
         }
       }
     }
